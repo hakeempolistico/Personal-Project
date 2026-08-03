@@ -103,6 +103,7 @@ model Transaction {
   categoryId    String?
   type          TransactionType
   amount        Decimal           @db.Decimal(15, 2)
+  currency      String            @default("USD")
   description   String?
   date          DateTime
   notes         String?
@@ -135,6 +136,7 @@ model Bill {
   userId        String
   name          String
   amount        Decimal      @db.Decimal(15, 2)
+  currency      String       @default("USD")
   dueDay        Int
   frequency     BillFrequency
   categoryId    String?
@@ -167,6 +169,7 @@ model Loan {
   name          String
   type          LoanType
   principal     Decimal      @db.Decimal(15, 2)
+  currency      String       @default("USD")
   interestRate  Decimal      @db.Decimal(5, 2)
   termMonths    Int
   startDate     DateTime
@@ -191,6 +194,7 @@ model LoanPayment {
   loanId        String
   userId        String
   amount        Decimal      @db.Decimal(15, 2)
+  currency      String       @default("USD")
   balanceAfter  Decimal      @db.Decimal(15, 2)
   notes         String?
   createdAt     DateTime     @default(now())

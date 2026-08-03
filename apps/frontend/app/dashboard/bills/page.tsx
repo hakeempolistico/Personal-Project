@@ -13,11 +13,13 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api-client';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { currencies } from '@/lib/currencies';
 import { Plus, Calendar, DollarSign, RefreshCw, Trash2, CheckCircle } from 'lucide-react';
 
 const billSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   amount: z.coerce.number().positive('Amount must be positive'),
+  currency: z.string().default('USD'),
   dueDay: z.coerce.number().min(1).max(31),
   frequency: z.string().min(1, 'Frequency is required'),
   categoryId: z.string().optional(),
@@ -29,6 +31,7 @@ interface Bill {
   id: string;
   name: string;
   amount: string;
+  currency: string;
   dueDay: number;
   frequency: string;
   categoryId: string | null;
@@ -235,7 +238,7 @@ export default function BillsPage() {
                     <div>
                       <h3 className="font-semibold text-lg">{bill.name}</h3>
                       <p className="text-2xl font-bold text-primary">
-                        {formatCurrency(Number(bill.amount))}
+                        {formatCurrency(Number(bill.amount), bill.currency || 'USD')}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {frequencyLabels[bill.frequency] || bill.frequency}
@@ -296,10 +299,26 @@ export default function BillsPage() {
               <Input id="modal-name" placeholder="e.g., Internet" {...register('name')} />
               {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="modal-amount">Amount</Label>
-              <Input id="modal-amount" type="number" step="0.01" placeholder="0.00" {...register('amount')} />
-              {errors.amount && <p className="text-sm text-destructive">{errors.amount.message}</p>}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="modal-amount">Amount</Label>
+                <Input id="modal-amount" type="number" step="0.01" placeholder="0.00" {...register('amount')} />
+                {errors.amount && <p className="text-sm text-destructive">{errors.amount.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="modal-currency">Currency</Label>
+                <select
+                  id="modal-currency"
+                  {...register('currency')}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  {currencies.map((curr) => (
+                    <option key={curr.code} value={curr.code}>
+                      {curr.code} ({curr.symbol})
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="modal-dueDay">Due Day (1-31)</Label>

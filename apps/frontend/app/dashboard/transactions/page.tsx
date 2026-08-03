@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api-client';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { currencies } from '@/lib/currencies';
 import { ArrowUpCircle, ArrowDownCircle, ArrowLeftRight } from 'lucide-react';
 
 const transactionSchema = z.object({
@@ -19,6 +20,7 @@ const transactionSchema = z.object({
   categoryId: z.string().optional(),
   type: z.enum(['INCOME', 'EXPENSE', 'TRANSFER']),
   amount: z.coerce.number().positive('Amount must be positive'),
+  currency: z.string().default('USD'),
   description: z.string().optional(),
   date: z.string().min(1, 'Date is required'),
   notes: z.string().optional(),
@@ -30,6 +32,7 @@ interface Account {
   id: string;
   name: string;
   type: string;
+  currency?: string;
 }
 
 interface Category {
@@ -43,7 +46,8 @@ interface Transaction {
   accountId: string;
   categoryId: string | null;
   type: string;
-  amount: number;
+  amount: string;
+  currency: string;
   description: string | null;
   date: string;
 }
@@ -156,12 +160,26 @@ export default function TransactionsPage() {
                 </select>
               </div>
               <div className="space-y-2">
+                <Label htmlFor="currency">Currency</Label>
+                <select
+                  id="currency"
+                  {...register('currency')}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  {currencies.map((curr) => (
+                    <option key={curr.code} value={curr.code}>
+                      {curr.code} ({curr.symbol}) - {curr.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
                 <Label htmlFor="amount">Amount</Label>
                 <Input id="amount" type="number" step="0.01" placeholder="0.00" {...register('amount')} />
                 {errors.amount && <p className="text-sm text-destructive">{errors.amount.message}</p>}
               </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="accountId">Account</Label>
                 <select
@@ -171,7 +189,7 @@ export default function TransactionsPage() {
                 >
                   <option value="">Select an account</option>
                   {accounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>{acc.name}</option>
+                    <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency || 'USD'})</option>
                   ))}
                 </select>
                 {errors.accountId && <p className="text-sm text-destructive">{errors.accountId.message}</p>}
@@ -241,7 +259,7 @@ export default function TransactionsPage() {
                       </div>
                     </div>
                     <p className={`text-lg font-bold ${trans.type === 'INCOME' ? 'text-green-600' : 'text-red-600'}`}>
-                      {trans.type === 'INCOME' ? '+' : '-'}{formatCurrency(trans.amount)}
+                      {trans.type === 'INCOME' ? '+' : '-'}{formatCurrency(parseFloat(trans.amount), trans.currency || 'USD')}
                     </p>
                   </CardContent>
                 </Card>

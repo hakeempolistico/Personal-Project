@@ -13,6 +13,11 @@ export class CreateBillDto {
   @Type(() => Number)
   amount: number;
 
+  @ApiProperty({ description: 'Currency code (e.g., USD, PHP)', required: false, default: 'USD' })
+  @IsString()
+  @IsOptional()
+  currency?: string;
+
   @ApiProperty({ description: 'Day of month the bill is due (1-31)' })
   @IsInt()
   @Min(1)
@@ -41,6 +46,11 @@ export class UpdateBillDto {
   @Type(() => Number)
   @IsOptional()
   amount?: number;
+
+  @ApiProperty({ description: 'Currency code', required: false })
+  @IsString()
+  @IsOptional()
+  currency?: string;
 
   @ApiProperty({ description: 'Day of month', required: false })
   @IsInt()

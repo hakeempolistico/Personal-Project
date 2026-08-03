@@ -16,6 +16,11 @@ export class CreateLoanDto {
   @Min(0)
   principal: number;
 
+  @ApiProperty({ description: 'Currency code (e.g., USD, PHP)', required: false, default: 'USD' })
+  @IsString()
+  @IsOptional()
+  currency?: string;
+
   @ApiProperty()
   @IsNumber()
   @Min(0)

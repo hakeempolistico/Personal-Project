@@ -22,6 +22,11 @@ export class CreateTransactionDto {
   @Type(() => Number)
   amount: number;
 
+  @ApiProperty({ description: 'Currency code (e.g., USD, PHP)', required: false, default: 'USD' })
+  @IsString()
+  @IsOptional()
+  currency?: string;
+
   @ApiProperty({ description: 'Transaction description', required: false })
   @IsString()
   @IsOptional()
@@ -58,6 +63,11 @@ export class UpdateTransactionDto {
   @Type(() => Number)
   @IsOptional()
   amount?: number;
+
+  @ApiProperty({ description: 'Currency code', required: false })
+  @IsString()
+  @IsOptional()
+  currency?: string;
 
   @ApiProperty({ description: 'Description', required: false })
   @IsString()

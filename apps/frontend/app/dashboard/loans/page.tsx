@@ -13,12 +13,14 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api-client';
 import { formatCurrency } from '@/lib/utils';
+import { currencies } from '@/lib/currencies';
 import { Banknote, TrendingUp, Percent } from 'lucide-react';
 
 const loanSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   type: z.enum(['PERSONAL', 'MORTGAGE', 'AUTO', 'STUDENT', 'CREDIT', 'OTHER']),
   principal: z.coerce.number().positive('Principal must be positive'),
+  currency: z.string().default('USD'),
   interestRate: z.coerce.number().min(0).max(100),
   termMonths: z.coerce.number().positive('Term must be positive'),
   startDate: z.string().min(1, 'Start date is required'),
@@ -30,16 +32,18 @@ type LoanFormData = z.infer<typeof loanSchema>;
 interface Account {
   id: string;
   name: string;
+  currency?: string;
 }
 
 interface Loan {
   id: string;
   name: string;
   type: string;
-  principal: number;
-  interestRate: number;
+  principal: string;
+  currency: string;
+  interestRate: string;
   termMonths: number;
-  remainingBalance: number;
+  remainingBalance: string;
   startDate: string;
   isActive: boolean;
 }
@@ -208,10 +212,26 @@ export default function LoansPage() {
                 {errors.principal && <p className="text-sm text-destructive">{errors.principal.message}</p>}
               </div>
               <div className="space-y-2">
+                <Label htmlFor="currency">Currency</Label>
+                <select
+                  id="currency"
+                  {...register('currency')}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  {currencies.map((curr) => (
+                    <option key={curr.code} value={curr.code}>
+                      {curr.code} ({curr.symbol})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="interestRate">Interest Rate (%)</Label>
                 <Input id="interestRate" type="number" step="0.01" placeholder="0.00" {...register('interestRate')} />
                 {errors.interestRate && <p className="text-sm text-destructive">{errors.interestRate.message}</p>}
               </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="termMonths">Term (Months)</Label>
                 <Input id="termMonths" type="number" placeholder="12" {...register('termMonths')} />
@@ -259,8 +279,11 @@ export default function LoansPage() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
             {loans.map((loan) => {
-              const paid = loan.principal - loan.remainingBalance;
-              const progress = Math.round((paid / loan.principal) * 100);
+              const principal = parseFloat(String(loan.principal));
+              const remaining = parseFloat(String(loan.remainingBalance));
+              const paid = principal - remaining;
+              const progress = principal > 0 ? Math.round((paid / principal) * 100) : 0;
+              const currency = loan.currency || 'USD';
               return (
                 <Card
                   key={loan.id}
@@ -284,11 +307,11 @@ export default function LoansPage() {
                     <div className="space-y-2">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Remaining Balance</span>
-                        <span className="font-bold text-red-600">{formatCurrency(loan.remainingBalance)}</span>
+                        <span className="font-bold text-red-600">{formatCurrency(remaining, currency)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Original Principal</span>
-                        <span>{formatCurrency(loan.principal)}</span>
+                        <span>{formatCurrency(principal, currency)}</span>
                       </div>
                       <div className="h-2 w-full rounded-full bg-secondary mt-3">
                         <div
