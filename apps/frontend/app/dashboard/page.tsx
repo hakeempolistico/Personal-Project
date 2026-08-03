@@ -119,6 +119,12 @@ export default function DashboardPage() {
 
   const recentTransactions = transactions.slice(0, 5);
 
+  const getDaysUntilDue = (nextDueAt: string) => {
+    const now = new Date();
+    const due = new Date(nextDueAt);
+    return Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  };
+
   // Calculate upcoming bills stats
   const totalDueSoon = upcomingBills
     .filter((b) => {
@@ -127,12 +133,6 @@ export default function DashboardPage() {
     })
     .reduce((sum, b) => sum + parseFloat(b.amount), 0);
   const dueSoonCount = upcomingBills.filter((b) => getDaysUntilDue(b.nextDueAt) <= 7).length;
-
-  const getDaysUntilDue = (nextDueAt: string) => {
-    const now = new Date();
-    const due = new Date(nextDueAt);
-    return Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-  };
 
   const getBillStatus = (nextDueAt: string) => {
     const days = getDaysUntilDue(nextDueAt);
