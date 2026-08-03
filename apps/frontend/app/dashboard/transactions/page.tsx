@@ -22,6 +22,7 @@ const transactionSchema = z.object({
   description: z.string().optional(),
   date: z.string().min(1, 'Date is required'),
   notes: z.string().optional(),
+  toAccountId: z.string().optional(), // For transfers
 });
 
 type TransactionFormData = z.infer<typeof transactionSchema>;
@@ -70,6 +71,7 @@ export default function TransactionsPage() {
     handleSubmit,
     reset,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<TransactionFormData>({
     resolver: zodResolver(transactionSchema),
@@ -80,6 +82,7 @@ export default function TransactionsPage() {
   });
 
   const transactionType = watch('type') || 'EXPENSE';
+  const fromAccountId = watch('accountId');
 
   useEffect(() => {
     fetchData();
@@ -118,11 +121,42 @@ export default function TransactionsPage() {
   const onSubmit = async (data: TransactionFormData) => {
     setIsCreating(true);
     try {
-      await apiClient.post('/transactions', {
-        ...data,
-        categoryId: data.categoryId || null,
-      });
-      toast({ title: 'Transaction created successfully!' });
+      // Use dedicated transfer endpoint for transfers
+      if (data.type === 'TRANSFER') {
+        if (!data.toAccountId) {
+          toast({
+            variant: 'destructive',
+            title: 'Transfer requires destination account',
+            description: 'Please select a destination account for the transfer.',
+          });
+          setIsCreating(false);
+          return;
+        }
+        if (data.accountId === data.toAccountId) {
+          toast({
+            variant: 'destructive',
+            title: 'Invalid transfer',
+            description: 'Source and destination accounts must be different.',
+          });
+          setIsCreating(false);
+          return;
+        }
+        await apiClient.post('/transactions/transfer', {
+          fromAccountId: data.accountId,
+          toAccountId: data.toAccountId,
+          amount: data.amount,
+          description: data.description,
+          date: data.date,
+          notes: data.notes,
+        });
+        toast({ title: 'Transfer completed successfully!' });
+      } else {
+        await apiClient.post('/transactions', {
+          ...data,
+          categoryId: data.categoryId || null,
+        });
+        toast({ title: 'Transaction created successfully!' });
+      }
       reset({ type: 'EXPENSE', date: new Date().toISOString().split('T')[0] });
       setShowForm(false);
       fetchData();
@@ -145,6 +179,9 @@ export default function TransactionsPage() {
 
   const filteredCategories = Array.isArray(categories) ? categories.filter((c) => c.type === transactionType || c.type === 'TRANSFER') : [];
   const displayCurrency = settings?.currency || 'PHP';
+  
+  // For transfers, exclude the from account from the to account options
+  const toAccountOptions = accounts.filter(a => a.id !== fromAccountId);
 
   return (
     <div className="space-y-6">
@@ -205,7 +242,7 @@ export default function TransactionsPage() {
       </button>
 
       {/* Add Transaction Modal */}
-      <Dialog open={showForm} onClose={() => setShowForm(false)} title="Add New Transaction" description="Record a new income or expense">
+      <Dialog open={showForm} onClose={() => setShowForm(false)} title={transactionType === 'TRANSFER' ? 'Transfer Money' : 'Add New Transaction'} description={transactionType === 'TRANSFER' ? 'Move money between your accounts' : 'Record a new income or expense'}>
         <DialogContent>
           <form onSubmit={(e) => {
             e.preventDefault();
@@ -230,43 +267,85 @@ export default function TransactionsPage() {
                 {errors.amount && <p className="text-sm text-destructive">{errors.amount.message}</p>}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="modal-accountId">Account</Label>
+                <Label htmlFor="modal-date">Date</Label>
+                <Input id="modal-date" type="date" {...register('date')} />
+                {errors.date && <p className="text-sm text-destructive">{errors.date.message}</p>}
+              </div>
+            </div>
+
+            {/* For Transfers: From Account */}
+            {transactionType === 'TRANSFER' && (
+              <div className="space-y-2">
+                <Label htmlFor="modal-from-accountId">From Account</Label>
                 <select
-                  id="modal-accountId"
+                  id="modal-from-accountId"
                   {...register('accountId')}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
-                  <option value="">Select an account</option>
+                  <option value="">Select source account</option>
                   {accounts.map((acc) => (
                     <option key={acc.id} value={acc.id}>{acc.name}</option>
                   ))}
                 </select>
                 {errors.accountId && <p className="text-sm text-destructive">{errors.accountId.message}</p>}
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
+            )}
+
+            {/* For Transfers: To Account */}
+            {transactionType === 'TRANSFER' && (
               <div className="space-y-2">
-                <Label htmlFor="modal-categoryId">Category</Label>
+                <Label htmlFor="modal-to-accountId">To Account</Label>
                 <select
-                  id="modal-categoryId"
-                  {...register('categoryId')}
+                  id="modal-to-accountId"
+                  {...register('toAccountId')}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
-                  <option value="">Select a category</option>
-                  {filteredCategories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  <option value="">Select destination account</option>
+                  {toAccountOptions.map((acc) => (
+                    <option key={acc.id} value={acc.id}>{acc.name}</option>
                   ))}
                 </select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="modal-date">Date</Label>
-                <Input id="modal-date" type="date" {...register('date')} />
-                {errors.date && <p className="text-sm text-destructive">{errors.date.message}</p>}
-              </div>
-            </div>
+            )}
+
+            {/* For non-Transfers: Account and Category */}
+            {transactionType !== 'TRANSFER' && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="modal-accountId">Account</Label>
+                    <select
+                      id="modal-accountId"
+                      {...register('accountId')}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <option value="">Select an account</option>
+                      {accounts.map((acc) => (
+                        <option key={acc.id} value={acc.id}>{acc.name}</option>
+                      ))}
+                    </select>
+                    {errors.accountId && <p className="text-sm text-destructive">{errors.accountId.message}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="modal-categoryId">Category</Label>
+                    <select
+                      id="modal-categoryId"
+                      {...register('categoryId')}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <option value="">Select a category</option>
+                      {filteredCategories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="modal-description">Description</Label>
-              <Input id="modal-description" placeholder="e.g., Grocery shopping" {...register('description')} />
+              <Input id="modal-description" placeholder={transactionType === 'TRANSFER' ? 'e.g., Monthly savings' : 'e.g., Grocery shopping'} {...register('description')} />
             </div>
             <div className="flex gap-2 justify-end">
               <button 
@@ -281,7 +360,7 @@ export default function TransactionsPage() {
                 disabled={isCreating}
                 className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
               >
-                {isCreating ? 'Creating...' : 'Create Transaction'}
+                {isCreating ? 'Processing...' : transactionType === 'TRANSFER' ? 'Transfer' : 'Create Transaction'}
               </button>
             </div>
           </form>
