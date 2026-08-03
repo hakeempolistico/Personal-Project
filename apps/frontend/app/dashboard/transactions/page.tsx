@@ -177,6 +177,23 @@ export default function TransactionsPage() {
     return <ArrowLeftRight className="h-5 w-5 text-blue-600" />;
   };
 
+  // For transfers, determine if this is money coming in (credit) or going out (debit)
+  const isIncomingTransfer = (trans: Transaction) => {
+    if (trans.type !== 'TRANSFER') return false;
+    // If description starts with "Transfer from", it's money coming into this account
+    return trans.description?.startsWith('Transfer from') || false;
+  };
+
+  const getAmountDisplay = (trans: Transaction) => {
+    const amount = parseFloat(trans.amount);
+    const isIncoming = trans.type === 'INCOME' || isIncomingTransfer(trans);
+    
+    return {
+      prefix: isIncoming ? '+' : '-',
+      className: isIncoming ? 'text-green-600' : 'text-red-600',
+    };
+  };
+
   const filteredCategories = Array.isArray(categories) ? categories.filter((c) => c.type === transactionType || c.type === 'TRANSFER') : [];
   const displayCurrency = settings?.currency || 'PHP';
   
@@ -222,8 +239,8 @@ export default function TransactionsPage() {
                         </p>
                       </div>
                     </div>
-                    <p className={`text-lg font-bold ${trans.type === 'INCOME' ? 'text-green-600' : 'text-red-600'}`}>
-                      {trans.type === 'INCOME' ? '+' : '-'}{formatCurrency(parseFloat(trans.amount), displayCurrency)}
+                    <p className={`text-lg font-bold ${getAmountDisplay(trans).className}`}>
+                      {getAmountDisplay(trans).prefix}{formatCurrency(parseFloat(trans.amount), displayCurrency)}
                     </p>
                   </CardContent>
                 </Card>
