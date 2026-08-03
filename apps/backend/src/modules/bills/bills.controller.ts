@@ -3,7 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { BillsService } from './bills.service';
-import { CreateBillDto, UpdateBillDto } from './dto/bills.dto';
+import { CreateBillDto, UpdateBillDto, PayBillDto } from './dto/bills.dto';
 
 @ApiTags('Bills')
 @Controller('bills')
@@ -40,6 +40,12 @@ export class BillsController {
     return this.billsService.findOne(id, user.id);
   }
 
+  @Get(':id/transactions')
+  @ApiOperation({ summary: 'Get all transactions for a bill' })
+  findAllTransactions(@Param('id') id: string, @CurrentUser() user: { id: string }) {
+    return this.billsService.findAllTransactions(user.id, id);
+  }
+
   @Patch(':id')
   @ApiOperation({ summary: 'Update bill' })
   update(
@@ -50,8 +56,18 @@ export class BillsController {
     return this.billsService.update(id, user.id, dto);
   }
 
+  @Post(':id/pay')
+  @ApiOperation({ summary: 'Pay a bill (creates transaction)' })
+  payBill(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string },
+    @Body() dto: PayBillDto,
+  ) {
+    return this.billsService.payBill(id, user.id, dto);
+  }
+
   @Patch(':id/paid')
-  @ApiOperation({ summary: 'Mark bill as paid' })
+  @ApiOperation({ summary: 'Mark bill as paid (without creating transaction)' })
   markAsPaid(@Param('id') id: string, @CurrentUser() user: { id: string }) {
     return this.billsService.markAsPaid(id, user.id);
   }

@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
-import { CreateBillDto, UpdateBillDto } from './dto/bills.dto';
+import { CreateBillDto, UpdateBillDto, PayBillDto } from './dto/bills.dto';
 
 @Injectable()
 export class BillsService {
@@ -16,9 +16,13 @@ export class BillsService {
         amount: dto.amount,
         dueDay: dto.dueDay,
         frequency: dto.frequency,
+        categoryId: dto.categoryId,
         isActive: dto.isActive !== undefined ? dto.isActive : true,
         nextDueAt,
         accountId: dto.accountId,
+      },
+      include: {
+        account: true,
       },
     });
   }
@@ -26,6 +30,9 @@ export class BillsService {
   async findAll(userId: string) {
     return this.prisma.bill.findMany({
       where: { userId, isActive: true },
+      include: {
+        account: true,
+      },
       orderBy: { dueDay: 'asc' },
     });
   }
@@ -44,6 +51,9 @@ export class BillsService {
           lte: futureDate,
         },
       },
+      include: {
+        account: true,
+      },
       orderBy: { nextDueAt: 'asc' },
     });
 
@@ -53,6 +63,13 @@ export class BillsService {
   async findOne(id: string, userId: string) {
     const bill = await this.prisma.bill.findUnique({
       where: { id },
+      include: {
+        account: true,
+        transactions: {
+          orderBy: { date: 'desc' },
+          take: 10,
+        },
+      },
     });
 
     if (!bill) {
@@ -66,6 +83,19 @@ export class BillsService {
     return bill;
   }
 
+  async findAllTransactions(userId: string, billId: string) {
+    await this.findOne(billId, userId);
+    
+    return this.prisma.transaction.findMany({
+      where: { billId },
+      include: {
+        account: true,
+        category: true,
+      },
+      orderBy: { date: 'desc' },
+    });
+  }
+
   async update(id: string, userId: string, dto: UpdateBillDto) {
     await this.findOne(id, userId);
 
@@ -76,7 +106,12 @@ export class BillsService {
         ...(dto.amount !== undefined && { amount: dto.amount }),
         ...(dto.dueDay !== undefined && { dueDay: dto.dueDay }),
         ...(dto.frequency && { frequency: dto.frequency }),
+        ...(dto.categoryId !== undefined && { categoryId: dto.categoryId }),
+        ...(dto.accountId !== undefined && { accountId: dto.accountId }),
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+      },
+      include: {
+        account: true,
       },
     });
   }
@@ -89,6 +124,89 @@ export class BillsService {
     });
   }
 
+  async payBill(id: string, userId: string, payDto: PayBillDto) {
+    const bill = await this.findOne(id, userId);
+
+    // Determine the payment amount
+    const paymentAmount = payDto.amount ?? Number(bill.amount);
+
+    // Determine which account to use
+    const accountId = payDto.accountId ?? bill.accountId;
+
+    if (!accountId) {
+      throw new BadRequestException('No account specified for bill payment. Please provide an accountId.');
+    }
+
+    // Verify account ownership
+    const account = await this.prisma.account.findUnique({
+      where: { id: accountId },
+    });
+
+    if (!account || account.userId !== userId) {
+      throw new NotFoundException('Account not found');
+    }
+
+    const nextDueAt = this.calculateNextDueDate(bill.dueDay, bill.frequency);
+    const now = new Date();
+
+    // Create transaction and update bill in a transaction
+    const result = await this.prisma.$transaction(async (prisma) => {
+      // Create the transaction
+      const transaction = await prisma.transaction.create({
+        data: {
+          userId,
+          accountId,
+          billId: id,
+          categoryId: bill.categoryId,
+          type: 'EXPENSE',
+          amount: paymentAmount,
+          currency: bill.currency,
+          description: `Payment for ${bill.name}`,
+          date: now,
+          notes: payDto.notes || `Bill payment - ${bill.name}`,
+        },
+        include: {
+          account: true,
+          category: true,
+        },
+      });
+
+      // Update account balance
+      await prisma.account.update({
+        where: { id: accountId },
+        data: {
+          balance: Number(account.balance) - paymentAmount,
+        },
+      });
+
+      // Update bill with payment info
+      const updatedBill = await prisma.bill.update({
+        where: { id },
+        data: {
+          lastPaidAt: now,
+          nextDueAt,
+        },
+        include: {
+          account: true,
+          transactions: {
+            orderBy: { date: 'desc' },
+            take: 5,
+            include: {
+              account: true,
+            },
+          },
+        },
+      });
+
+      return {
+        transaction,
+        bill: updatedBill,
+      };
+    });
+
+    return result;
+  }
+
   async markAsPaid(id: string, userId: string) {
     const bill = await this.findOne(id, userId);
 
@@ -99,6 +217,13 @@ export class BillsService {
       data: {
         lastPaidAt: new Date(),
         nextDueAt,
+      },
+      include: {
+        account: true,
+        transactions: {
+          orderBy: { date: 'desc' },
+          take: 5,
+        },
       },
     });
   }

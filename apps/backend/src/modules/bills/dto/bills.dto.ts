@@ -13,7 +13,7 @@ export class CreateBillDto {
   @Type(() => Number)
   amount: number;
 
-  @ApiProperty({ description: 'Currency code (e.g., USD, PHP)', required: false, default: 'USD' })
+  @ApiPropertyOptional({ description: 'Currency code (e.g., USD, PHP)', default: 'USD' })
   @IsString()
   @IsOptional()
   currency?: string;
@@ -29,35 +29,40 @@ export class CreateBillDto {
   @IsEnum(BillFrequency)
   frequency: BillFrequency;
 
+  @ApiPropertyOptional({ description: 'Category ID for this bill' })
+  @IsString()
+  @IsOptional()
+  categoryId?: string;
+
   @ApiPropertyOptional({ description: 'Account ID to pay bill from' })
   @IsString()
   @IsOptional()
   accountId?: string;
 
-  @ApiProperty({ description: 'Is active', required: false, default: true })
+  @ApiPropertyOptional({ description: 'Is active', default: true })
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
 }
 
 export class UpdateBillDto {
-  @ApiProperty({ description: 'Bill name', required: false })
+  @ApiPropertyOptional({ description: 'Bill name' })
   @IsString()
   @IsOptional()
   name?: string;
 
-  @ApiProperty({ description: 'Bill amount', required: false })
+  @ApiPropertyOptional({ description: 'Bill amount' })
   @IsNumber()
   @Type(() => Number)
   @IsOptional()
   amount?: number;
 
-  @ApiProperty({ description: 'Currency code', required: false })
+  @ApiPropertyOptional({ description: 'Currency code' })
   @IsString()
   @IsOptional()
   currency?: string;
 
-  @ApiProperty({ description: 'Day of month', required: false })
+  @ApiPropertyOptional({ description: 'Day of month' })
   @IsInt()
   @Min(1)
   @Max(31)
@@ -65,13 +70,41 @@ export class UpdateBillDto {
   @IsOptional()
   dueDay?: number;
 
-  @ApiProperty({ enum: BillFrequency, description: 'Frequency', required: false })
+  @ApiPropertyOptional({ enum: BillFrequency, description: 'Frequency' })
   @IsEnum(BillFrequency)
   @IsOptional()
   frequency?: BillFrequency;
 
-  @ApiProperty({ description: 'Is active', required: false })
+  @ApiPropertyOptional({ description: 'Category ID' })
+  @IsString()
+  @IsOptional()
+  categoryId?: string;
+
+  @ApiPropertyOptional({ description: 'Account ID' })
+  @IsString()
+  @IsOptional()
+  accountId?: string;
+
+  @ApiPropertyOptional({ description: 'Is active' })
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+}
+
+export class PayBillDto {
+  @ApiPropertyOptional({ description: 'Payment amount (defaults to bill amount)' })
+  @IsNumber()
+  @Type(() => Number)
+  @IsOptional()
+  amount?: number;
+
+  @ApiPropertyOptional({ description: 'Account ID to pay from (required if bill has no default account)' })
+  @IsString()
+  @IsOptional()
+  accountId?: string;
+
+  @ApiPropertyOptional({ description: 'Notes for the transaction' })
+  @IsString()
+  @IsOptional()
+  notes?: string;
 }

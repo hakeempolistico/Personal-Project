@@ -52,6 +52,9 @@ model Account {
   // Relations
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions Transaction[]
+  bills        Bill[]
+  loans        Loan[]
+  loanPayments LoanPayment[]
 
   @@index([userId])
   @@map("accounts")
@@ -101,6 +104,8 @@ model Transaction {
   userId        String
   accountId     String
   categoryId    String?
+  billId        String?
+  loanPaymentId String?
   type          TransactionType
   amount        Decimal           @db.Decimal(15, 2)
   currency      String            @default("USD")
@@ -116,10 +121,14 @@ model Transaction {
   user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   account       Account          @relation(fields: [accountId], references: [id], onDelete: Cascade)
   category      Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  bill          Bill?            @relation(fields: [billId], references: [id], onDelete: SetNull)
+  loanPayment   LoanPayment?     @relation(fields: [loanPaymentId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([accountId])
   @@index([categoryId])
+  @@index([billId])
+  @@index([loanPaymentId])
   @@index([date])
   @@map("transactions")
 }
@@ -149,8 +158,11 @@ model Bill {
 
   // Relations
   user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account       Account?     @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  transactions  Transaction[]
 
   @@index([userId])
+  @@index([accountId])
   @@map("bills")
 }
 
@@ -182,9 +194,11 @@ model Loan {
 
   // Relations
   user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account       Account?     @relation(fields: [accountId], references: [id], onDelete: SetNull)
   payments      LoanPayment[]
 
   @@index([userId])
+  @@index([accountId])
   @@map("loans")
 }
 
@@ -193,6 +207,7 @@ model LoanPayment {
   id            String       @id @default(uuid())
   loanId        String
   userId        String
+  accountId     String?
   amount        Decimal      @db.Decimal(15, 2)
   currency      String       @default("USD")
   balanceAfter  Decimal      @db.Decimal(15, 2)
@@ -201,9 +216,12 @@ model LoanPayment {
 
   // Relations
   loan          Loan         @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  account       Account?     @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  transactions  Transaction[]
 
   @@index([loanId])
   @@index([userId])
+  @@index([accountId])
   @@map("loan_payments")
 }
 

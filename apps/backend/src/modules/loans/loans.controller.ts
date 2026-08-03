@@ -3,7 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { LoansService } from './loans.service';
-import { CreateLoanDto } from './dto/loans.dto';
+import { CreateLoanDto, MakePaymentDto } from './dto/loans.dto';
 
 @ApiTags('Loans')
 @Controller('loans')
@@ -30,6 +30,12 @@ export class LoansController {
     return this.loansService.findOne(id, user.id);
   }
 
+  @Get(':id/transactions')
+  @ApiOperation({ summary: 'Get all transactions for a loan' })
+  findAllTransactions(@Param('id') id: string, @CurrentUser() user: { id: string }) {
+    return this.loansService.findAllTransactions(user.id, id);
+  }
+
   @Get(':id/payments')
   @ApiOperation({ summary: 'Get loan payment history' })
   getPaymentHistory(@Param('id') id: string, @CurrentUser() user: { id: string }) {
@@ -53,12 +59,12 @@ export class LoansController {
   }
 
   @Post(':id/payment')
-  @ApiOperation({ summary: 'Make a loan payment' })
+  @ApiOperation({ summary: 'Make a loan payment (creates transaction)' })
   makePayment(
     @Param('id') id: string,
     @CurrentUser() user: { id: string },
-    @Body('amount') amount: number,
+    @Body() dto: MakePaymentDto,
   ) {
-    return this.loansService.makePayment(id, user.id, amount);
+    return this.loansService.makePayment(id, user.id, dto);
   }
 }

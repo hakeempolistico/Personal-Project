@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { TransactionType } from '@prisma/client';
 import { IsString, IsNumber, IsEnum, IsOptional, IsBoolean, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -8,7 +8,7 @@ export class CreateTransactionDto {
   @IsString()
   accountId: string;
 
-  @ApiProperty({ description: 'Category ID', required: false })
+  @ApiPropertyOptional({ description: 'Category ID' })
   @IsString()
   @IsOptional()
   categoryId?: string;
@@ -27,7 +27,7 @@ export class CreateTransactionDto {
   @IsOptional()
   currency?: string;
 
-  @ApiProperty({ description: 'Transaction description', required: false })
+  @ApiPropertyOptional({ description: 'Transaction description' })
   @IsString()
   @IsOptional()
   description?: string;
@@ -36,50 +36,60 @@ export class CreateTransactionDto {
   @IsDateString()
   date: string;
 
-  @ApiProperty({ description: 'Notes', required: false })
+  @ApiPropertyOptional({ description: 'Notes' })
   @IsString()
   @IsOptional()
   notes?: string;
 
-  @ApiProperty({ description: 'Is recurring', required: false })
+  @ApiPropertyOptional({ description: 'Is recurring' })
   @IsBoolean()
   @IsOptional()
   isRecurring?: boolean;
+
+  @ApiPropertyOptional({ description: 'Linked Bill ID (for bill payments)' })
+  @IsString()
+  @IsOptional()
+  billId?: string;
+
+  @ApiPropertyOptional({ description: 'Linked Loan Payment ID (for loan payments)' })
+  @IsString()
+  @IsOptional()
+  loanPaymentId?: string;
 }
 
 export class UpdateTransactionDto {
-  @ApiProperty({ description: 'Account ID', required: false })
+  @ApiPropertyOptional({ description: 'Account ID' })
   @IsString()
   @IsOptional()
   accountId?: string;
 
-  @ApiProperty({ description: 'Category ID', required: false })
+  @ApiPropertyOptional({ description: 'Category ID' })
   @IsString()
   @IsOptional()
   categoryId?: string;
 
-  @ApiProperty({ description: 'Amount', required: false })
+  @ApiPropertyOptional({ description: 'Amount' })
   @IsNumber()
   @Type(() => Number)
   @IsOptional()
   amount?: number;
 
-  @ApiProperty({ description: 'Currency code', required: false })
+  @ApiPropertyOptional({ description: 'Currency code' })
   @IsString()
   @IsOptional()
   currency?: string;
 
-  @ApiProperty({ description: 'Description', required: false })
+  @ApiPropertyOptional({ description: 'Description' })
   @IsString()
   @IsOptional()
   description?: string;
 
-  @ApiProperty({ description: 'Date', required: false })
+  @ApiPropertyOptional({ description: 'Date' })
   @IsDateString()
   @IsOptional()
   date?: string;
 
-  @ApiProperty({ description: 'Notes', required: false })
+  @ApiPropertyOptional({ description: 'Notes' })
   @IsString()
   @IsOptional()
   notes?: string;

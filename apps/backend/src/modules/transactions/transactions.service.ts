@@ -16,12 +16,35 @@ export class TransactionsService {
       throw new NotFoundException('Account not found');
     }
 
+    // Verify bill ownership if billId is provided
+    if (dto.billId) {
+      const bill = await this.prisma.bill.findUnique({
+        where: { id: dto.billId },
+      });
+      if (!bill || bill.userId !== userId) {
+        throw new NotFoundException('Bill not found');
+      }
+    }
+
+    // Verify loan payment ownership if loanPaymentId is provided
+    if (dto.loanPaymentId) {
+      const loanPayment = await this.prisma.loanPayment.findUnique({
+        where: { id: dto.loanPaymentId },
+        include: { loan: true },
+      });
+      if (!loanPayment || loanPayment.userId !== userId) {
+        throw new NotFoundException('Loan payment not found');
+      }
+    }
+
     // Create transaction
     const transaction = await this.prisma.transaction.create({
       data: {
         userId,
         accountId: dto.accountId,
         categoryId: dto.categoryId,
+        billId: dto.billId,
+        loanPaymentId: dto.loanPaymentId,
         type: dto.type,
         amount: dto.amount,
         description: dto.description,
@@ -32,6 +55,12 @@ export class TransactionsService {
       include: {
         account: true,
         category: true,
+        bill: true,
+        loanPayment: {
+          include: {
+            loan: true,
+          },
+        },
       },
     });
 
@@ -65,6 +94,69 @@ export class TransactionsService {
       include: {
         account: true,
         category: true,
+        bill: true,
+        loanPayment: {
+          include: {
+            loan: true,
+          },
+        },
+      },
+      orderBy: { date: 'desc' },
+    });
+  }
+
+  async findAllByBill(userId: string, billId: string) {
+    const bill = await this.prisma.bill.findUnique({
+      where: { id: billId },
+    });
+    if (!bill || bill.userId !== userId) {
+      throw new NotFoundException('Bill not found');
+    }
+
+    return this.prisma.transaction.findMany({
+      where: { billId },
+      include: {
+        account: true,
+        category: true,
+      },
+      orderBy: { date: 'desc' },
+    });
+  }
+
+  async findAllByLoanPayment(userId: string, loanPaymentId: string) {
+    const loanPayment = await this.prisma.loanPayment.findUnique({
+      where: { id: loanPaymentId },
+      include: { loan: true },
+    });
+    if (!loanPayment || loanPayment.userId !== userId) {
+      throw new NotFoundException('Loan payment not found');
+    }
+
+    return this.prisma.transaction.findMany({
+      where: { loanPaymentId },
+      include: {
+        account: true,
+      },
+      orderBy: { date: 'desc' },
+    });
+  }
+
+  async findAllBySavingsAccount(userId: string, accountId: string) {
+    const account = await this.prisma.account.findUnique({
+      where: { id: accountId },
+    });
+    if (!account || account.userId !== userId) {
+      throw new NotFoundException('Account not found');
+    }
+
+    return this.prisma.transaction.findMany({
+      where: { 
+        accountId,
+        userId,
+      },
+      include: {
+        account: true,
+        category: true,
       },
       orderBy: { date: 'desc' },
     });
@@ -76,6 +168,12 @@ export class TransactionsService {
       include: {
         account: true,
         category: true,
+        bill: true,
+        loanPayment: {
+          include: {
+            loan: true,
+          },
+        },
       },
     });
 
@@ -106,6 +204,12 @@ export class TransactionsService {
       include: {
         account: true,
         category: true,
+        bill: true,
+        loanPayment: {
+          include: {
+            loan: true,
+          },
+        },
       },
     });
   }

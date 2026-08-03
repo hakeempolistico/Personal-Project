@@ -44,6 +44,24 @@ export class TransactionsController {
     return this.transactionsService.getMonthlyStats(user.id, parseInt(year), parseInt(month));
   }
 
+  @Get('bill/:billId')
+  @ApiOperation({ summary: 'Get all transactions for a bill' })
+  findByBill(@Param('billId') billId: string, @CurrentUser() user: { id: string }) {
+    return this.transactionsService.findAllByBill(user.id, billId);
+  }
+
+  @Get('loan-payment/:loanPaymentId')
+  @ApiOperation({ summary: 'Get all transactions for a loan payment' })
+  findByLoanPayment(@Param('loanPaymentId') loanPaymentId: string, @CurrentUser() user: { id: string }) {
+    return this.transactionsService.findAllByLoanPayment(user.id, loanPaymentId);
+  }
+
+  @Get('account/:accountId')
+  @ApiOperation({ summary: 'Get all transactions for an account (e.g., savings account)' })
+  findByAccount(@Param('accountId') accountId: string, @CurrentUser() user: { id: string }) {
+    return this.transactionsService.findAllBySavingsAccount(user.id, accountId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get transaction by id' })
   findOne(@Param('id') id: string, @CurrentUser() user: { id: string }) {

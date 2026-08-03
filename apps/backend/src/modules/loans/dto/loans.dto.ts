@@ -40,7 +40,7 @@ export class CreateLoanDto {
   @IsDateString()
   startDate: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Account ID linked to this loan (for payments)' })
   @IsOptional()
   @IsString()
   accountId?: string;
@@ -50,4 +50,22 @@ export class CreateLoanDto {
   @IsOptional()
   @Type(() => Number)
   remainingBalance?: number;
+}
+
+export class MakePaymentDto {
+  @ApiProperty({ description: 'Payment amount' })
+  @IsNumber()
+  @Min(0.01)
+  @Type(() => Number)
+  amount: number;
+
+  @ApiPropertyOptional({ description: 'Account ID to pay from' })
+  @IsString()
+  @IsOptional()
+  accountId?: string;
+
+  @ApiPropertyOptional({ description: 'Notes for the payment' })
+  @IsString()
+  @IsOptional()
+  notes?: string;
 }
