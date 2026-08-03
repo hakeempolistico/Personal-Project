@@ -10,7 +10,6 @@ import { apiClient } from '@/lib/api-client';
 import {
   LayoutDashboard,
   Wallet,
-  Tags,
   ArrowLeftRight,
   FileText,
   Banknote,
@@ -27,7 +26,6 @@ import {
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Accounts', href: '/dashboard/accounts', icon: Wallet },
-  { name: 'Categories', href: '/dashboard/categories', icon: Tags },
   { name: 'Transactions', href: '/dashboard/transactions', icon: ArrowLeftRight },
   { name: 'Bills', href: '/dashboard/bills', icon: FileText },
   { name: 'Loans', href: '/dashboard/loans', icon: Banknote },
