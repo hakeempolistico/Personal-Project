@@ -16,13 +16,13 @@ import { ArrowUpCircle, ArrowDownCircle, ArrowLeftRight, Plus } from 'lucide-rea
 
 const transactionSchema = z.object({
   accountId: z.string().min(1, 'Account is required'),
-  categoryId: z.string().optional(),
+  category: z.string().optional(),
   type: z.enum(['INCOME', 'EXPENSE', 'TRANSFER']),
   amount: z.coerce.number().positive('Amount must be positive'),
   description: z.string().optional(),
   date: z.string().min(1, 'Date is required'),
   notes: z.string().optional(),
-  toAccountId: z.string().optional(), // For transfers
+  toAccountId: z.string().optional(),
 });
 
 type TransactionFormData = z.infer<typeof transactionSchema>;
@@ -32,12 +32,6 @@ interface Account {
   name: string;
   type: string;
   currency?: string;
-}
-
-interface Category {
-  id: string;
-  name: string;
-  type: string;
 }
 
 interface Transaction {
@@ -55,11 +49,35 @@ interface Settings {
   currency: string;
 }
 
+// Static categories
+const STATIC_CATEGORIES = {
+  EXPENSE: [
+    { id: 'food', name: 'Food & Dining', icon: '🍔' },
+    { id: 'housing', name: 'Housing', icon: '🏠' },
+    { id: 'transportation', name: 'Transportation', icon: '🚗' },
+    { id: 'healthcare', name: 'Healthcare', icon: '💊' },
+    { id: 'entertainment', name: 'Entertainment', icon: '🎬' },
+    { id: 'shopping', name: 'Shopping', icon: '🛒' },
+    { id: 'utilities', name: 'Utilities', icon: '📱' },
+    { id: 'education', name: 'Education', icon: '📚' },
+    { id: 'other_expense', name: 'Other', icon: '💰' },
+  ],
+  INCOME: [
+    { id: 'salary', name: 'Salary', icon: '💼' },
+    { id: 'freelance', name: 'Freelance', icon: '💵' },
+    { id: 'investment', name: 'Investment', icon: '📈' },
+    { id: 'gift', name: 'Gift', icon: '🎁' },
+    { id: 'other_income', name: 'Other', icon: '💰' },
+  ],
+  TRANSFER: [
+    { id: 'internal_transfer', name: 'Internal Transfer', icon: '🔄' },
+  ],
+};
+
 export default function TransactionsPage() {
   const router = useRouter();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -100,14 +118,6 @@ export default function TransactionsPage() {
       setAccounts(accData);
     } catch (error) {
       console.error('Failed to fetch accounts:', error);
-    }
-    try {
-      const catData = await apiClient.get<Category[]>('/categories');
-      if (Array.isArray(catData)) {
-        setCategories(catData);
-      }
-    } catch (error) {
-      console.error('Failed to fetch categories:', error);
     }
     try {
       const settingsData = await apiClient.get<Settings>('/settings');
@@ -152,8 +162,12 @@ export default function TransactionsPage() {
         toast({ title: 'Transfer completed successfully!' });
       } else {
         await apiClient.post('/transactions', {
-          ...data,
-          categoryId: data.categoryId || null,
+          accountId: data.accountId,
+          type: data.type,
+          amount: data.amount,
+          description: data.description,
+          date: data.date,
+          notes: data.notes,
         });
         toast({ title: 'Transaction created successfully!' });
       }
@@ -194,11 +208,13 @@ export default function TransactionsPage() {
     };
   };
 
-  const filteredCategories = Array.isArray(categories) ? categories.filter((c) => c.type === transactionType || c.type === 'TRANSFER') : [];
   const displayCurrency = settings?.currency || 'PHP';
   
   // For transfers, exclude the from account from the to account options
   const toAccountOptions = accounts.filter(a => a.id !== fromAccountId);
+
+  // Get static categories for the current transaction type
+  const staticCategories = STATIC_CATEGORIES[transactionType as keyof typeof STATIC_CATEGORIES] || [];
 
   return (
     <div className="space-y-6">
@@ -222,7 +238,6 @@ export default function TransactionsPage() {
           <div className="space-y-2">
             {transactions.map((trans) => {
               const account = accounts.find((a) => a.id === trans.accountId);
-              const category = categories.find((c) => c.id === trans.categoryId);
               return (
                 <Card 
                   key={trans.id} 
@@ -235,7 +250,7 @@ export default function TransactionsPage() {
                       <div>
                         <p className="font-medium">{trans.description || 'No description'}</p>
                         <p className="text-sm text-muted-foreground">
-                          {account?.name || 'Unknown Account'} • {category?.name || 'Uncategorized'} • {formatDate(trans.date)}
+                          {account?.name || 'Unknown Account'} • {formatDate(trans.date)}
                         </p>
                       </div>
                     </div>
@@ -344,15 +359,15 @@ export default function TransactionsPage() {
                     {errors.accountId && <p className="text-sm text-destructive">{errors.accountId.message}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="modal-categoryId">Category</Label>
+                    <Label htmlFor="modal-category">Category</Label>
                     <select
-                      id="modal-categoryId"
-                      {...register('categoryId')}
+                      id="modal-category"
+                      {...register('category')}
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
                       <option value="">Select a category</option>
-                      {filteredCategories.map((cat) => (
-                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      {staticCategories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
                       ))}
                     </select>
                   </div>

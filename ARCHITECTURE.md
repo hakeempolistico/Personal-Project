@@ -48,7 +48,6 @@ Personal-Project/
 │       │   │   ├── auth/           # Authentication
 │       │   │   ├── users/          # User management
 │       │   │   ├── accounts/       # Bank accounts
-│       │   │   ├── categories/     # Categories (placeholder)
 │       │   │   ├── transactions/   # Financial transactions
 │       │   │   ├── bills/          # Recurring bills
 │       │   │   ├── loans/          # Loan tracking
@@ -85,7 +84,6 @@ modules/{module-name}/
 
 - **User**: Authentication and profile data
 - **Account**: Bank accounts, credit cards, wallets
-- **Category**: Income/expense categories
 - **Transaction**: Financial transactions
 - **Bill**: Recurring bills and subscriptions
 - **Loan**: Loan records with payment tracking
@@ -98,7 +96,6 @@ modules/{module-name}/
 ```
 User
 ├── Accounts (1:N)
-├── Categories (1:N)
 ├── Transactions (1:N)
 ├── Bills (1:N)
 ├── Loans (1:N)
@@ -108,12 +105,6 @@ User
 
 Account
 └── Transactions (1:N)
-
-Category
-└── Transactions (1:N)
-
-Budget
-└── Category (N:1)
 
 Loan
 └── LoanPayments (1:N)
@@ -191,7 +182,6 @@ DELETE /api/loans/:id                - Delete loan (requires auth)
 
 #### Placeholder Modules (API ready, frontend pending)
 ```
-GET    /api/categories       - Categories (placeholder)
 GET    /api/budgets          - Budgets (placeholder)
 GET    /api/savings-goals    - Savings goals (placeholder)
 GET    /api/reports          - Reports (placeholder)
@@ -223,12 +213,10 @@ app/
     │       └── page.tsx
     ├── bills/
     │   └── page.tsx
-    ├── loans/
-    │   ├── page.tsx
-    │   └── [id]/
-    │       └── page.tsx
-    └── categories/
-        └── page.tsx
+    └── loans/
+        ├── page.tsx
+        └── [id]/
+            └── page.tsx
 ```
 
 ## Development Workflow

@@ -6,7 +6,6 @@ import { PrismaModule } from './common/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { AccountsModule } from './modules/accounts/accounts.module';
-import { CategoriesModule } from './modules/categories/categories.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
 import { BillsModule } from './modules/bills/bills.module';
 import { LoansModule } from './modules/loans/loans.module';
@@ -47,7 +46,6 @@ import { SettingsModule } from './modules/settings/settings.module';
     AuthModule,
     UsersModule,
     AccountsModule,
-    CategoriesModule,
     TransactionsModule,
     BillsModule,
     LoansModule,
