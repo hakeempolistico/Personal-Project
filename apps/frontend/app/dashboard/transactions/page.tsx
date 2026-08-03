@@ -8,12 +8,13 @@ import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api-client';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { currencies } from '@/lib/currencies';
-import { ArrowUpCircle, ArrowDownCircle, ArrowLeftRight } from 'lucide-react';
+import { ArrowUpCircle, ArrowDownCircle, ArrowLeftRight, Plus } from 'lucide-react';
 
 const transactionSchema = z.object({
   accountId: z.string().min(1, 'Account is required'),
@@ -59,6 +60,7 @@ export default function TransactionsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [showForm, setShowForm] = useState(false);
   const { toast } = useToast();
 
   const {
@@ -112,6 +114,7 @@ export default function TransactionsPage() {
       });
       toast({ title: 'Transaction created successfully!' });
       reset({ type: 'EXPENSE', date: new Date().toISOString().split('T')[0] });
+      setShowForm(false);
       fetchData();
     } catch (error) {
       toast({
@@ -138,93 +141,6 @@ export default function TransactionsPage() {
         <h1 className="text-3xl font-bold tracking-tight">Transactions</h1>
         <p className="text-muted-foreground">Track your income, expenses, and transfers</p>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Add New Transaction</CardTitle>
-          <CardDescription>Record a new income or expense</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="type">Transaction Type</Label>
-                <select
-                  id="type"
-                  {...register('type')}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <option value="EXPENSE">Expense</option>
-                  <option value="INCOME">Income</option>
-                  <option value="TRANSFER">Transfer</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="currency">Currency</Label>
-                <select
-                  id="currency"
-                  {...register('currency')}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  {currencies.map((curr) => (
-                    <option key={curr.code} value={curr.code}>
-                      {curr.code} ({curr.symbol}) - {curr.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="amount">Amount</Label>
-                <Input id="amount" type="number" step="0.01" placeholder="0.00" {...register('amount')} />
-                {errors.amount && <p className="text-sm text-destructive">{errors.amount.message}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="accountId">Account</Label>
-                <select
-                  id="accountId"
-                  {...register('accountId')}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <option value="">Select an account</option>
-                  {accounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency || 'USD'})</option>
-                  ))}
-                </select>
-                {errors.accountId && <p className="text-sm text-destructive">{errors.accountId.message}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="categoryId">Category</Label>
-                <select
-                  id="categoryId"
-                  {...register('categoryId')}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <option value="">Select a category</option>
-                  {filteredCategories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="date">Date</Label>
-                <Input id="date" type="date" {...register('date')} />
-                {errors.date && <p className="text-sm text-destructive">{errors.date.message}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Input id="description" placeholder="e.g., Grocery shopping" {...register('description')} />
-              </div>
-            </div>
-            <Button type="submit" disabled={isCreating}>
-              {isCreating ? 'Creating...' : 'Create Transaction'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
 
       <div className="space-y-4">
         <h2 className="text-xl font-semibold">Recent Transactions</h2>
@@ -268,6 +184,114 @@ export default function TransactionsPage() {
           </div>
         )}
       </div>
+
+      {/* Floating Action Button */}
+      <button
+        onClick={() => setShowForm(true)}
+        className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors flex items-center justify-center z-50"
+      >
+        <Plus className="h-6 w-6" />
+      </button>
+
+      {/* Add Transaction Modal */}
+      <Dialog open={showForm} onClose={() => setShowForm(false)} title="Add New Transaction" description="Record a new income or expense">
+        <DialogContent>
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            handleSubmit(onSubmit)();
+          }} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="modal-type">Transaction Type</Label>
+                <select
+                  id="modal-type"
+                  {...register('type')}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  <option value="EXPENSE">Expense</option>
+                  <option value="INCOME">Income</option>
+                  <option value="TRANSFER">Transfer</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="modal-currency">Currency</Label>
+                <select
+                  id="modal-currency"
+                  {...register('currency')}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  {currencies.map((curr) => (
+                    <option key={curr.code} value={curr.code}>
+                      {curr.code} ({curr.symbol})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="modal-amount">Amount</Label>
+                <Input id="modal-amount" type="number" step="0.01" placeholder="0.00" {...register('amount')} />
+                {errors.amount && <p className="text-sm text-destructive">{errors.amount.message}</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="modal-accountId">Account</Label>
+                <select
+                  id="modal-accountId"
+                  {...register('accountId')}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  <option value="">Select an account</option>
+                  {accounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency || 'USD'})</option>
+                  ))}
+                </select>
+                {errors.accountId && <p className="text-sm text-destructive">{errors.accountId.message}</p>}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="modal-categoryId">Category</Label>
+                <select
+                  id="modal-categoryId"
+                  {...register('categoryId')}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  <option value="">Select a category</option>
+                  {filteredCategories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="modal-date">Date</Label>
+                <Input id="modal-date" type="date" {...register('date')} />
+                {errors.date && <p className="text-sm text-destructive">{errors.date.message}</p>}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="modal-description">Description</Label>
+              <Input id="modal-description" placeholder="e.g., Grocery shopping" {...register('description')} />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button 
+                type="button" 
+                className="h-10 px-4 py-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground text-sm font-medium"
+                onClick={() => setShowForm(false)}
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit" 
+                disabled={isCreating}
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+              >
+                {isCreating ? 'Creating...' : 'Create Transaction'}
+              </button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

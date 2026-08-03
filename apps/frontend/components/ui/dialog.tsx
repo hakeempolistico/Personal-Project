@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 interface DialogProps {
@@ -33,7 +32,7 @@ export function Dialog({ open, onClose, title, description, children }: DialogPr
 
   if (!open) return null;
 
-  const content = (
+  return (
     <div className="fixed inset-0 z-50">
       <div
         className="fixed inset-0 bg-black/50 backdrop-blur-sm"
@@ -67,8 +66,6 @@ export function Dialog({ open, onClose, title, description, children }: DialogPr
       </div>
     </div>
   );
-
-  return createPortal(content, document.body);
 }
 
 interface DialogContentProps {

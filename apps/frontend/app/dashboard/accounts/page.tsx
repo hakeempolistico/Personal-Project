@@ -7,11 +7,13 @@ import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api-client';
 import { formatCurrency } from '@/lib/utils';
-import { Wallet, CreditCard, PiggyBank, Landmark } from 'lucide-react';
+import { currencies } from '@/lib/currencies';
+import { Wallet, CreditCard, PiggyBank, Landmark, Plus } from 'lucide-react';
 
 const accountSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -42,6 +44,7 @@ export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const { toast } = useToast();
 
   const {
@@ -78,7 +81,8 @@ export default function AccountsPage() {
     try {
       await apiClient.post('/accounts', data);
       toast({ title: 'Account created successfully!' });
-      reset();
+      reset({ type: 'CHECKING', balance: 0, currency: 'USD' });
+      setShowModal(false);
       fetchAccounts();
     } catch (error) {
       toast({
@@ -103,49 +107,6 @@ export default function AccountsPage() {
         <h1 className="text-3xl font-bold tracking-tight">Accounts</h1>
         <p className="text-muted-foreground">Manage your bank accounts and wallets</p>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Add New Account</CardTitle>
-          <CardDescription>Create a new account to track your finances</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="name">Account Name</Label>
-                <Input id="name" placeholder="e.g., Main Checking" {...register('name')} />
-                {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="type">Account Type</Label>
-                <select
-                  id="type"
-                  {...register('type')}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  {accountTypes.map((type) => (
-                    <option key={type.value} value={type.value}>{type.label}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="space-y-2">
-                <Label htmlFor="balance">Initial Balance</Label>
-                <Input id="balance" type="number" step="0.01" placeholder="0.00" {...register('balance')} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="currency">Currency</Label>
-                <Input id="currency" placeholder="USD" {...register('currency')} />
-              </div>
-            </div>
-            <Button type="submit" disabled={isCreating}>
-              {isCreating ? 'Creating...' : 'Create Account'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
 
       <div className="space-y-4">
         <h2 className="text-xl font-semibold">Your Accounts</h2>
@@ -177,6 +138,78 @@ export default function AccountsPage() {
           </div>
         )}
       </div>
+
+      {/* Floating Action Button */}
+      <button
+        onClick={() => setShowModal(true)}
+        className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors flex items-center justify-center z-50"
+      >
+        <Plus className="h-6 w-6" />
+      </button>
+
+      {/* Add Account Modal */}
+      <Dialog open={showModal} onClose={() => setShowModal(false)} title="Add New Account" description="Create a new account to track your finances">
+        <DialogContent>
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            handleSubmit(onSubmit)();
+          }} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="modal-name">Account Name</Label>
+              <Input id="modal-name" placeholder="e.g., Main Checking" {...register('name')} />
+              {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="modal-type">Account Type</Label>
+              <select
+                id="modal-type"
+                {...register('type')}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                {accountTypes.map((type) => (
+                  <option key={type.value} value={type.value}>{type.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="modal-balance">Initial Balance</Label>
+                <Input id="modal-balance" type="number" step="0.01" placeholder="0.00" {...register('balance')} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="modal-currency">Currency</Label>
+                <select
+                  id="modal-currency"
+                  {...register('currency')}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  {currencies.map((curr) => (
+                    <option key={curr.code} value={curr.code}>
+                      {curr.code} ({curr.symbol})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button 
+                type="button" 
+                className="h-10 px-4 py-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground text-sm font-medium"
+                onClick={() => setShowModal(false)}
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit" 
+                disabled={isCreating}
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+              >
+                {isCreating ? 'Creating...' : 'Create Account'}
+              </button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
