@@ -1,0 +1,26 @@
+{
+  "name": "personal-finance-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm run dev -w @finance-tracker/backend",
+    "dev:frontend": "npm run dev -w @finance-tracker/frontend",
+    "build": "npm run build -w @finance-tracker/backend && npm run build -w @finance-tracker/frontend",
+    "lint": "npm run lint -w @finance-tracker/backend && npm run lint -w @finance-tracker/frontend",
+    "test": "npm run test -w @finance-tracker/backend && npm run test -w @finance-tracker/frontend",
+    "db:migrate": "npm run prisma:migrate -w @finance-tracker/backend",
+    "db:generate": "npm run prisma:generate -w @finance-tracker/backend",
+    "db:seed": "npm run db:seed -w @finance-tracker/backend",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
