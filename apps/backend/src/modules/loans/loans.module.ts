@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
-import { PlaceholderController } from './loans.controller';
-import { PlaceholderService } from './loans.service';
+import { LoansController } from './loans.controller';
+import { LoansService } from './loans.service';
 
 @Module({
-  controllers: [PlaceholderController],
-  providers: [PlaceholderService],
+  controllers: [LoansController],
+  providers: [LoansService],
+  exports: [LoansService],
 })
 export class LoansModule {}

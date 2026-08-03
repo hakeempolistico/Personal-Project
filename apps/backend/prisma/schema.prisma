@@ -178,9 +178,28 @@ model Loan {
 
   // Relations
   user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments      LoanPayment[]
 
   @@index([userId])
   @@map("loans")
+}
+
+// Loan Payment Model
+model LoanPayment {
+  id            String       @id @default(uuid())
+  loanId        String
+  userId        String
+  amount        Decimal      @db.Decimal(15, 2)
+  balanceAfter  Decimal      @db.Decimal(15, 2)
+  notes         String?
+  createdAt     DateTime     @default(now())
+
+  // Relations
+  loan          Loan         @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@index([loanId])
+  @@index([userId])
+  @@map("loan_payments")
 }
 
 enum LoanType {
