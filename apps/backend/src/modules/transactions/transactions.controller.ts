@@ -3,7 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { TransactionsService } from './transactions.service';
-import { CreateTransactionDto, UpdateTransactionDto } from './dto/transactions.dto';
+import { CreateTransactionDto, CreateTransferDto, UpdateTransactionDto } from './dto/transactions.dto';
 
 @ApiTags('Transactions')
 @Controller('transactions')
@@ -11,6 +11,12 @@ import { CreateTransactionDto, UpdateTransactionDto } from './dto/transactions.d
 @ApiBearerAuth()
 export class TransactionsController {
   constructor(private readonly transactionsService: TransactionsService) {}
+
+  @Post('transfer')
+  @ApiOperation({ summary: 'Transfer money between accounts' })
+  createTransfer(@CurrentUser() user: { id: string }, @Body() dto: CreateTransferDto) {
+    return this.transactionsService.createTransfer(user.id, dto);
+  }
 
   @Post()
   @ApiOperation({ summary: 'Create a new transaction' })

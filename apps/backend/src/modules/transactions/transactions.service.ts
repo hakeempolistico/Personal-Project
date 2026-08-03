@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
 import { SettingsService } from '../settings/settings.service';
-import { CreateTransactionDto, UpdateTransactionDto } from './dto/transactions.dto';
+import { CreateTransactionDto, CreateTransferDto, UpdateTransactionDto } from './dto/transactions.dto';
 
 @Injectable()
 export class TransactionsService {
@@ -9,6 +9,118 @@ export class TransactionsService {
     private prisma: PrismaService,
     private settingsService: SettingsService,
   ) {}
+
+  async createTransfer(userId: string, dto: CreateTransferDto) {
+    // Verify source account ownership
+    const fromAccount = await this.prisma.account.findUnique({
+      where: { id: dto.fromAccountId },
+    });
+
+    if (!fromAccount || fromAccount.userId !== userId) {
+      throw new NotFoundException('Source account not found');
+    }
+
+    // Verify destination account ownership
+    const toAccount = await this.prisma.account.findUnique({
+      where: { id: dto.toAccountId },
+    });
+
+    if (!toAccount || toAccount.userId !== userId) {
+      throw new NotFoundException('Destination account not found');
+    }
+
+    // Ensure source and destination are different
+    if (dto.fromAccountId === dto.toAccountId) {
+      throw new BadRequestException('Source and destination accounts must be different');
+    }
+
+    // Ensure amount is positive
+    if (dto.amount <= 0) {
+      throw new BadRequestException('Transfer amount must be greater than zero');
+    }
+
+    // Get currency from settings
+    const currency = await this.settingsService.getCurrency(userId);
+
+    // Use Prisma transaction to ensure atomicity
+    const result = await this.prisma.$transaction(async (prisma) => {
+      // Create the debit transaction (money out of source account)
+      const debitTransaction = await prisma.transaction.create({
+        data: {
+          userId,
+          accountId: dto.fromAccountId,
+          type: 'TRANSFER',
+          amount: dto.amount,
+          currency,
+          description: dto.description || `Transfer to ${toAccount.name}`,
+          date: new Date(dto.date),
+          notes: dto.notes,
+        },
+        include: {
+          account: true,
+        },
+      });
+
+      // Create the credit transaction (money into destination account)
+      const creditTransaction = await prisma.transaction.create({
+        data: {
+          userId,
+          accountId: dto.toAccountId,
+          type: 'TRANSFER',
+          amount: dto.amount,
+          currency,
+          description: dto.description || `Transfer from ${fromAccount.name}`,
+          date: new Date(dto.date),
+          notes: dto.notes,
+        },
+        include: {
+          account: true,
+        },
+      });
+
+      // Update source account balance (deduct)
+      await prisma.account.update({
+        where: { id: dto.fromAccountId },
+        data: {
+          balance: Number(fromAccount.balance) - dto.amount,
+        },
+      });
+
+      // Update destination account balance (add)
+      await prisma.account.update({
+        where: { id: dto.toAccountId },
+        data: {
+          balance: Number(toAccount.balance) + dto.amount,
+        },
+      });
+
+      return {
+        debitTransaction,
+        creditTransaction,
+      };
+    });
+
+    return {
+      transferId: result.debitTransaction.id,
+      fromAccount: {
+        id: fromAccount.id,
+        name: fromAccount.name,
+        type: fromAccount.type,
+        transactionId: result.debitTransaction.id,
+      },
+      toAccount: {
+        id: toAccount.id,
+        name: toAccount.name,
+        type: toAccount.type,
+        transactionId: result.creditTransaction.id,
+      },
+      amount: dto.amount,
+      currency,
+      description: dto.description,
+      date: dto.date,
+      notes: dto.notes,
+    };
+  }
 
   async create(userId: string, dto: CreateTransactionDto) {
     // Verify account ownership

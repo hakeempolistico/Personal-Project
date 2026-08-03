@@ -160,6 +160,7 @@ DELETE /api/accounts/:id      - Delete account (requires auth)
 ```
 GET    /api/transactions            - List all transactions (requires auth)
 POST   /api/transactions            - Create transaction (requires auth)
+POST   /api/transactions/transfer   - Transfer money between accounts (requires auth)
 GET    /api/transactions/stats      - Get monthly statistics (requires auth)
 GET    /api/transactions/:id        - Get transaction by ID (requires auth)
 PATCH  /api/transactions/:id        - Update transaction (requires auth)
