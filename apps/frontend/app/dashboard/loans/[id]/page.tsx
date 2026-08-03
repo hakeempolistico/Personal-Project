@@ -16,7 +16,9 @@ import { formatCurrency, formatDate } from '@/lib/utils';
 import { ArrowLeft, Banknote, Calendar, DollarSign, Percent, Clock, Trash2, Edit, CreditCard } from 'lucide-react';
 
 const paymentSchema = z.object({
+  accountId: z.string().min(1, 'Account is required'),
   amount: z.coerce.number().positive('Amount must be positive'),
+  notes: z.string().optional(),
 });
 
 type PaymentFormData = z.infer<typeof paymentSchema>;
@@ -27,6 +29,10 @@ interface LoanPayment {
   balanceAfter: number;
   notes: string | null;
   createdAt: string;
+  account?: {
+    id: string;
+    name: string;
+  };
 }
 
 interface Loan {
@@ -48,6 +54,14 @@ interface Loan {
     name: string;
   };
   payments?: LoanPayment[];
+}
+
+interface Account {
+  id: string;
+  name: string;
+  type: string;
+  balance: string;
+  currency: string;
 }
 
 const loanTypes = [
@@ -73,6 +87,7 @@ export default function LoanDetailPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [loan, setLoan] = useState<Loan | null>(null);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isPaying, setIsPaying] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -84,16 +99,28 @@ export default function LoanDetailPage() {
     formState: { errors },
   } = useForm<PaymentFormData>({
     resolver: zodResolver(paymentSchema),
+    defaultValues: {
+      accountId: '',
+      notes: '',
+    },
   });
 
   useEffect(() => {
     fetchLoan();
+    fetchAccounts();
   }, [params.id]);
 
   const fetchLoan = async () => {
     try {
       const data = await apiClient.get<Loan>(`/loans/${params.id}`);
       setLoan(data);
+      // Set default account if loan has linked account
+      if (data.accountId) {
+        reset((formValues) => ({
+          ...formValues,
+          accountId: data.accountId || '',
+        }));
+      }
     } catch (error) {
       console.error('Failed to fetch loan:', error);
       toast({
@@ -106,15 +133,26 @@ export default function LoanDetailPage() {
     }
   };
 
+  const fetchAccounts = async () => {
+    try {
+      const data = await apiClient.get<Account[]>('/accounts');
+      setAccounts(data);
+    } catch (error) {
+      console.error('Failed to fetch accounts:', error);
+    }
+  };
+
   const onSubmitPayment = async (data: PaymentFormData) => {
     setIsPaying(true);
     try {
-      const updatedLoan = await apiClient.post<Loan>(`/loans/${params.id}/payment`, {
+      const result = await apiClient.post<{ loan: Loan }>(`/loans/${params.id}/payment`, {
+        accountId: data.accountId,
         amount: data.amount,
+        notes: data.notes,
       });
-      setLoan(updatedLoan);
-      toast({ title: 'Payment successful!' });
-      reset();
+      setLoan(result.loan);
+      toast({ title: 'Payment successful! Transaction created.' });
+      reset({ accountId: data.accountId, amount: undefined as unknown as number, notes: '' });
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -282,6 +320,24 @@ export default function LoanDetailPage() {
               <CardContent>
                 <form onSubmit={handleSubmit(onSubmitPayment)} className="space-y-4">
                   <div className="space-y-2">
+                    <Label htmlFor="accountId">Pay From Account *</Label>
+                    <select
+                      id="accountId"
+                      {...register('accountId')}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <option value="">Select an account</option>
+                      {accounts.map((acc) => (
+                        <option key={acc.id} value={acc.id}>
+                          {acc.name} ({formatCurrency(Number(acc.balance), acc.currency)})
+                        </option>
+                      ))}
+                    </select>
+                    {errors.accountId && (
+                      <p className="text-sm text-destructive">{errors.accountId.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
                     <Label htmlFor="amount">Payment Amount</Label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
@@ -300,6 +356,14 @@ export default function LoanDetailPage() {
                       <p className="text-sm text-destructive">{errors.amount.message}</p>
                     )}
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="notes">Notes (optional)</Label>
+                    <Input
+                      id="notes"
+                      placeholder="e.g., Monthly payment"
+                      {...register('notes')}
+                    />
+                  </div>
                   <div className="flex gap-2">
                     <Button type="submit" disabled={isPaying} className="flex-1">
                       {isPaying ? 'Processing...' : 'Make Payment'}
@@ -307,7 +371,7 @@ export default function LoanDetailPage() {
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => reset()}
+                      onClick={() => reset({ accountId: loan.accountId || '', amount: undefined as unknown as number, notes: '' })}
                       disabled={isPaying}
                     >
                       Reset

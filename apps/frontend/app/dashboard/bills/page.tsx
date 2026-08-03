@@ -23,9 +23,18 @@ const billSchema = z.object({
   dueDay: z.coerce.number().min(1).max(31),
   frequency: z.string().min(1, 'Frequency is required'),
   categoryId: z.string().optional(),
+  accountId: z.string().optional(),
 });
 
 type BillFormData = z.infer<typeof billSchema>;
+
+const payBillSchema = z.object({
+  accountId: z.string().min(1, 'Account is required'),
+  amount: z.coerce.number().positive('Amount must be positive').optional(),
+  notes: z.string().optional(),
+});
+
+type PayBillFormData = z.infer<typeof payBillSchema>;
 
 interface Bill {
   id: string;
@@ -42,6 +51,14 @@ interface Bill {
   createdAt: string;
 }
 
+interface Account {
+  id: string;
+  name: string;
+  type: string;
+  balance: string;
+  currency: string;
+}
+
 const frequencyLabels: Record<string, string> = {
   WEEKLY: 'Weekly',
   BIWEEKLY: 'Bi-weekly',
@@ -52,10 +69,13 @@ const frequencyLabels: Record<string, string> = {
 
 export default function BillsPage() {
   const [bills, setBills] = useState<Bill[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [payingBillId, setPayingBillId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [showPayModal, setShowPayModal] = useState(false);
+  const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const { toast } = useToast();
 
   const {
@@ -71,8 +91,16 @@ export default function BillsPage() {
     },
   });
 
+  const {
+    register: registerPay,
+    handleSubmit: handleSubmitPay,
+    reset: resetPay,
+    formState: { errors: payErrors },
+  } = useForm<PayBillFormData>();
+
   useEffect(() => {
     fetchBills();
+    fetchAccounts();
   }, []);
 
   const fetchBills = async () => {
@@ -83,6 +111,15 @@ export default function BillsPage() {
       console.error('Failed to fetch bills:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchAccounts = async () => {
+    try {
+      const data = await apiClient.get<Account[]>('/accounts');
+      setAccounts(data);
+    } catch (error) {
+      console.error('Failed to fetch accounts:', error);
     }
   };
 
@@ -107,16 +144,32 @@ export default function BillsPage() {
     }
   };
 
-  const handleMarkAsPaid = async (id: string) => {
-    setPayingBillId(id);
+  const openPayModal = (bill: Bill) => {
+    setSelectedBill(bill);
+    resetPay({ accountId: bill.accountId || '', amount: undefined, notes: '' });
+    setShowPayModal(true);
+  };
+
+  const handlePayBill = async (data: PayBillFormData) => {
+    if (!selectedBill) return;
+    setPayingBillId(selectedBill.id);
     try {
-      await apiClient.post(`/bills/${id}/pay`);
-      toast({ title: 'Bill marked as paid!' });
+      await apiClient.post(`/bills/${selectedBill.id}/pay`, {
+        accountId: data.accountId,
+        amount: data.amount,
+        notes: data.notes,
+      });
+      toast({ title: 'Bill paid successfully! Transaction created.' });
+      setShowPayModal(false);
+      setSelectedBill(null);
+      resetPay();
       fetchBills();
     } catch (error) {
+      console.error('Failed to pay bill:', error);
       toast({
         variant: 'destructive',
-        title: 'Failed to mark as paid',
+        title: 'Failed to pay bill',
+        description: error instanceof Error ? error.message : 'An error occurred',
       });
     } finally {
       setPayingBillId(null);
@@ -256,11 +309,11 @@ export default function BillsPage() {
                       variant="outline"
                       size="sm"
                       className="flex-1"
-                      onClick={() => handleMarkAsPaid(bill.id)}
+                      onClick={() => openPayModal(bill)}
                       disabled={payingBillId === bill.id}
                     >
                       <CheckCircle className="mr-2 h-4 w-4" />
-                      {payingBillId === bill.id ? 'Processing...' : 'Mark Paid'}
+                      {payingBillId === bill.id ? 'Processing...' : 'Pay Bill'}
                     </Button>
                     <Button
                       variant="ghost"
@@ -339,6 +392,19 @@ export default function BillsPage() {
                 <option value="YEARLY">Yearly</option>
               </select>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="modal-account">Default Account (Optional)</Label>
+              <select
+                id="modal-account"
+                {...register('accountId')}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">No default account</option>
+                {accounts.map((acc) => (
+                  <option key={acc.id} value={acc.id}>{acc.name}</option>
+                ))}
+              </select>
+            </div>
             <div className="flex gap-2 justify-end">
               <button 
                 type="button" 
@@ -354,6 +420,69 @@ export default function BillsPage() {
                 className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
               >
                 {isCreating ? 'Creating...' : 'Add Bill'}
+              </button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Pay Bill Modal */}
+      <Dialog open={showPayModal} onClose={() => setShowPayModal(false)} title={`Pay ${selectedBill?.name || 'Bill'}`} description="Select an account to pay from">
+        <DialogContent>
+          <form onSubmit={handleSubmitPay(handlePayBill)} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="pay-account">Pay From Account *</Label>
+              <select
+                id="pay-account"
+                {...registerPay('accountId')}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">Select an account</option>
+                {accounts.map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.name} ({formatCurrency(Number(acc.balance), acc.currency)})
+                  </option>
+                ))}
+              </select>
+              {payErrors.accountId && <p className="text-sm text-destructive">{payErrors.accountId.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pay-amount">Amount (optional)</Label>
+              <Input 
+                id="pay-amount" 
+                type="number" 
+                step="0.01" 
+                placeholder={`Default: ${selectedBill?.amount || '0.00'}`} 
+                {...registerPay('amount')} 
+              />
+              {payErrors.amount && <p className="text-sm text-destructive">{payErrors.amount.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pay-notes">Notes (optional)</Label>
+              <Input 
+                id="pay-notes" 
+                placeholder="e.g., Electricity bill" 
+                {...registerPay('notes')} 
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button 
+                type="button" 
+                className="h-10 px-4 py-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground text-sm font-medium"
+                onClick={() => {
+                  setShowPayModal(false);
+                  setSelectedBill(null);
+                  resetPay();
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit" 
+                disabled={payingBillId !== null}
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+              >
+                {payingBillId !== null ? 'Processing...' : 'Pay Bill'}
               </button>
             </div>
           </form>
