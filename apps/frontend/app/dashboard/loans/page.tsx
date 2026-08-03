@@ -10,11 +10,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Dialog } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api-client';
 import { formatCurrency } from '@/lib/utils';
 import { currencies } from '@/lib/currencies';
-import { Banknote, TrendingUp, Percent } from 'lucide-react';
+import { Banknote, TrendingUp, Percent, Plus } from 'lucide-react';
 
 const loanSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -71,6 +72,7 @@ export default function LoansPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
@@ -117,6 +119,7 @@ export default function LoansPage() {
       });
       toast({ title: 'Loan created successfully!' });
       reset({ type: 'PERSONAL', interestRate: 0, termMonths: 12, startDate: new Date().toISOString().split('T')[0] });
+      setIsModalOpen(false);
       fetchData();
     } catch (error) {
       toast({
@@ -140,7 +143,7 @@ export default function LoansPage() {
     : '0.00';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-16">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Loans</h1>
         <p className="text-muted-foreground">Track and manage your loans and debts</p>
@@ -179,92 +182,6 @@ export default function LoansPage() {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Add New Loan</CardTitle>
-          <CardDescription>Add a new loan to track your debt</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="name">Loan Name</Label>
-                <Input id="name" placeholder="e.g., Car Loan" {...register('name')} />
-                {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="type">Loan Type</Label>
-                <select
-                  id="type"
-                  {...register('type')}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  {loanTypes.map((type) => (
-                    <option key={type.value} value={type.value}>{type.label}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="space-y-2">
-                <Label htmlFor="principal">Principal Amount</Label>
-                <Input id="principal" type="number" step="0.01" placeholder="0.00" {...register('principal')} />
-                {errors.principal && <p className="text-sm text-destructive">{errors.principal.message}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="currency">Currency</Label>
-                <select
-                  id="currency"
-                  {...register('currency')}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  {currencies.map((curr) => (
-                    <option key={curr.code} value={curr.code}>
-                      {curr.code} ({curr.symbol})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="interestRate">Interest Rate (%)</Label>
-                <Input id="interestRate" type="number" step="0.01" placeholder="0.00" {...register('interestRate')} />
-                {errors.interestRate && <p className="text-sm text-destructive">{errors.interestRate.message}</p>}
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="termMonths">Term (Months)</Label>
-                <Input id="termMonths" type="number" placeholder="12" {...register('termMonths')} />
-                {errors.termMonths && <p className="text-sm text-destructive">{errors.termMonths.message}</p>}
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="startDate">Start Date</Label>
-                <Input id="startDate" type="date" {...register('startDate')} />
-                {errors.startDate && <p className="text-sm text-destructive">{errors.startDate.message}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="accountId">Linked Account (Optional)</Label>
-                <select
-                  id="accountId"
-                  {...register('accountId')}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <option value="">No linked account</option>
-                  {accounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>{acc.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <Button type="submit" disabled={isCreating}>
-              {isCreating ? 'Creating...' : 'Create Loan'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
       <div className="space-y-4">
         <h2 className="text-xl font-semibold">Your Loans</h2>
         {isLoading ? (
@@ -273,7 +190,7 @@ export default function LoansPage() {
           <Card>
             <CardContent className="py-8 text-center">
               <Banknote className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">No loans yet. Add your first loan above.</p>
+              <p className="text-muted-foreground">No loans yet. Add your first loan using the button below.</p>
             </CardContent>
           </Card>
         ) : (
@@ -331,6 +248,93 @@ export default function LoansPage() {
           </div>
         )}
       </div>
+
+      {/* Floating Action Button */}
+      <Button
+        onClick={() => setIsModalOpen(true)}
+        className="fixed bottom-6 left-6 h-14 w-14 rounded-full shadow-lg"
+        size="icon"
+      >
+        <Plus className="h-6 w-6" />
+      </Button>
+
+      {/* Create Loan Modal */}
+      <Dialog
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title="Add New Loan"
+        description="Add a new loan to track your debt"
+      >
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="modal-name">Loan Name</Label>
+            <Input id="modal-name" placeholder="e.g., Car Loan" {...register('name')} />
+            {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="modal-type">Loan Type</Label>
+            <select
+              id="modal-type"
+              {...register('type')}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              {loanTypes.map((type) => (
+                <option key={type.value} value={type.value}>{type.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="modal-principal">Principal Amount</Label>
+            <Input id="modal-principal" type="number" step="0.01" placeholder="0.00" {...register('principal')} />
+            {errors.principal && <p className="text-sm text-destructive">{errors.principal.message}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="modal-currency">Currency</Label>
+            <select
+              id="modal-currency"
+              {...register('currency')}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              {currencies.map((curr) => (
+                <option key={curr.code} value={curr.code}>
+                  {curr.code} ({curr.symbol})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="modal-interestRate">Interest Rate (%)</Label>
+            <Input id="modal-interestRate" type="number" step="0.01" placeholder="0.00" {...register('interestRate')} />
+            {errors.interestRate && <p className="text-sm text-destructive">{errors.interestRate.message}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="modal-termMonths">Term (Months)</Label>
+            <Input id="modal-termMonths" type="number" placeholder="12" {...register('termMonths')} />
+            {errors.termMonths && <p className="text-sm text-destructive">{errors.termMonths.message}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="modal-startDate">Start Date</Label>
+            <Input id="modal-startDate" type="date" {...register('startDate')} />
+            {errors.startDate && <p className="text-sm text-destructive">{errors.startDate.message}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="modal-accountId">Linked Account (Optional)</Label>
+            <select
+              id="modal-accountId"
+              {...register('accountId')}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <option value="">No linked account</option>
+              {accounts.map((acc) => (
+                <option key={acc.id} value={acc.id}>{acc.name}</option>
+              ))}
+            </select>
+          </div>
+          <Button type="submit" disabled={isCreating} className="w-full">
+            {isCreating ? 'Creating...' : 'Create Loan'}
+          </Button>
+        </form>
+      </Dialog>
     </div>
   );
 }
