@@ -1,18 +1,23 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { CreateLoanDto, MakePaymentDto } from './dto/loans.dto';
 
 @Injectable()
 export class LoansService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private settingsService: SettingsService,
+  ) {}
 
   async create(userId: string, dto: CreateLoanDto) {
+    const currency = await this.settingsService.getCurrency(userId);
     return this.prisma.loan.create({
       data: {
         name: dto.name,
         type: dto.type,
         principal: dto.principal,
-        currency: dto.currency || 'USD',
+        currency,
         interestRate: dto.interestRate,
         termMonths: dto.termMonths,
         startDate: new Date(dto.startDate),
@@ -98,6 +103,9 @@ export class LoansService {
       throw new NotFoundException('Account not found');
     }
 
+    // Get currency from settings
+    const currency = await this.settingsService.getCurrency(userId);
+
     const paymentAmount = paymentDto.amount;
     const newBalance = Math.max(0, Number(loan.remainingBalance) - paymentAmount);
     const now = new Date();
@@ -111,7 +119,7 @@ export class LoansService {
           userId,
           accountId,
           amount: paymentAmount,
-          currency: loan.currency,
+          currency,
           balanceAfter: newBalance,
           notes: paymentDto.notes,
         },
@@ -128,7 +136,7 @@ export class LoansService {
           loanPaymentId: loanPayment.id,
           type: 'EXPENSE',
           amount: paymentAmount,
-          currency: loan.currency,
+          currency,
           description: `Payment for ${loan.name}`,
           date: now,
           notes: paymentDto.notes || `Loan payment - ${loan.name}`,

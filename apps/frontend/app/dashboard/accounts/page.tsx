@@ -4,22 +4,19 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api-client';
 import { formatCurrency } from '@/lib/utils';
-import { currencies } from '@/lib/currencies';
 import { Wallet, CreditCard, PiggyBank, Landmark, Plus } from 'lucide-react';
 
 const accountSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   type: z.enum(['CHECKING', 'SAVINGS', 'CREDIT_CARD', 'WALLET', 'INVESTMENT']),
   balance: z.coerce.number().default(0),
-  currency: z.string().default('USD'),
 });
 
 type AccountFormData = z.infer<typeof accountSchema>;
@@ -29,6 +26,10 @@ interface Account {
   name: string;
   type: string;
   balance: number;
+  currency: string;
+}
+
+interface Settings {
   currency: string;
 }
 
@@ -42,6 +43,7 @@ const accountTypes = [
 
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [settings, setSettings] = useState<Settings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -57,20 +59,23 @@ export default function AccountsPage() {
     defaultValues: {
       type: 'CHECKING',
       balance: 0,
-      currency: 'USD',
     },
   });
 
   useEffect(() => {
-    fetchAccounts();
+    fetchData();
   }, []);
 
-  const fetchAccounts = async () => {
+  const fetchData = async () => {
     try {
-      const data = await apiClient.get<Account[]>('/accounts');
-      setAccounts(data);
+      const [accData, settingsData] = await Promise.all([
+        apiClient.get<Account[]>('/accounts'),
+        apiClient.get<Settings>('/settings'),
+      ]);
+      setAccounts(accData);
+      setSettings(settingsData);
     } catch (error) {
-      console.error('Failed to fetch accounts:', error);
+      console.error('Failed to fetch data:', error);
     } finally {
       setIsLoading(false);
     }
@@ -81,9 +86,9 @@ export default function AccountsPage() {
     try {
       await apiClient.post('/accounts', data);
       toast({ title: 'Account created successfully!' });
-      reset({ type: 'CHECKING', balance: 0, currency: 'USD' });
+      reset({ type: 'CHECKING', balance: 0 });
       setShowModal(false);
-      fetchAccounts();
+      fetchData();
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -100,6 +105,8 @@ export default function AccountsPage() {
     const Icon = accountType?.icon || Wallet;
     return <Icon className="h-5 w-5" />;
   };
+
+  const displayCurrency = settings?.currency || 'PHP';
 
   return (
     <div className="space-y-6">
@@ -130,7 +137,7 @@ export default function AccountsPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-2xl font-bold">{formatCurrency(account.balance, account.currency)}</p>
+                  <p className="text-2xl font-bold">{formatCurrency(account.balance, displayCurrency)}</p>
                   <p className="text-sm text-muted-foreground">{account.type.replace('_', ' ')}</p>
                 </CardContent>
               </Card>
@@ -171,25 +178,9 @@ export default function AccountsPage() {
                 ))}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="modal-balance">Initial Balance</Label>
-                <Input id="modal-balance" type="number" step="0.01" placeholder="0.00" {...register('balance')} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="modal-currency">Currency</Label>
-                <select
-                  id="modal-currency"
-                  {...register('currency')}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  {currencies.map((curr) => (
-                    <option key={curr.code} value={curr.code}>
-                      {curr.code} ({curr.symbol})
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="modal-balance">Initial Balance</Label>
+              <Input id="modal-balance" type="number" step="0.01" placeholder="0.00" {...register('balance')} />
             </div>
             <div className="flex gap-2 justify-end">
               <button 

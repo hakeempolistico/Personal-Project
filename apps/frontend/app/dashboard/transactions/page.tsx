@@ -5,15 +5,13 @@ import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api-client';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import { currencies } from '@/lib/currencies';
 import { ArrowUpCircle, ArrowDownCircle, ArrowLeftRight, Plus } from 'lucide-react';
 
 const transactionSchema = z.object({
@@ -21,7 +19,6 @@ const transactionSchema = z.object({
   categoryId: z.string().optional(),
   type: z.enum(['INCOME', 'EXPENSE', 'TRANSFER']),
   amount: z.coerce.number().positive('Amount must be positive'),
-  currency: z.string().default('USD'),
   description: z.string().optional(),
   date: z.string().min(1, 'Date is required'),
   notes: z.string().optional(),
@@ -53,11 +50,16 @@ interface Transaction {
   date: string;
 }
 
+interface Settings {
+  currency: string;
+}
+
 export default function TransactionsPage() {
   const router = useRouter();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [settings, setSettings] = useState<Settings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -104,6 +106,12 @@ export default function TransactionsPage() {
     } catch (error) {
       console.error('Failed to fetch categories:', error);
     }
+    try {
+      const settingsData = await apiClient.get<Settings>('/settings');
+      setSettings(settingsData);
+    } catch (error) {
+      console.error('Failed to fetch settings:', error);
+    }
     setIsLoading(false);
   };
 
@@ -136,6 +144,7 @@ export default function TransactionsPage() {
   };
 
   const filteredCategories = Array.isArray(categories) ? categories.filter((c) => c.type === transactionType || c.type === 'TRANSFER') : [];
+  const displayCurrency = settings?.currency || 'PHP';
 
   return (
     <div className="space-y-6">
@@ -177,7 +186,7 @@ export default function TransactionsPage() {
                       </div>
                     </div>
                     <p className={`text-lg font-bold ${trans.type === 'INCOME' ? 'text-green-600' : 'text-red-600'}`}>
-                      {trans.type === 'INCOME' ? '+' : '-'}{formatCurrency(parseFloat(trans.amount), trans.currency || 'USD')}
+                      {trans.type === 'INCOME' ? '+' : '-'}{formatCurrency(parseFloat(trans.amount), displayCurrency)}
                     </p>
                   </CardContent>
                 </Card>
@@ -202,33 +211,17 @@ export default function TransactionsPage() {
             e.preventDefault();
             handleSubmit(onSubmit)();
           }} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="modal-type">Transaction Type</Label>
-                <select
-                  id="modal-type"
-                  {...register('type')}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <option value="EXPENSE">Expense</option>
-                  <option value="INCOME">Income</option>
-                  <option value="TRANSFER">Transfer</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="modal-currency">Currency</Label>
-                <select
-                  id="modal-currency"
-                  {...register('currency')}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  {currencies.map((curr) => (
-                    <option key={curr.code} value={curr.code}>
-                      {curr.code} ({curr.symbol})
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="modal-type">Transaction Type</Label>
+              <select
+                id="modal-type"
+                {...register('type')}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="EXPENSE">Expense</option>
+                <option value="INCOME">Income</option>
+                <option value="TRANSFER">Transfer</option>
+              </select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -245,7 +238,7 @@ export default function TransactionsPage() {
                 >
                   <option value="">Select an account</option>
                   {accounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>{acc.name} ({acc.currency || 'USD'})</option>
+                    <option key={acc.id} value={acc.id}>{acc.name}</option>
                   ))}
                 </select>
                 {errors.accountId && <p className="text-sm text-destructive">{errors.accountId.message}</p>}

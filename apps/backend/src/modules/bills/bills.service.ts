@@ -1,19 +1,25 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { CreateBillDto, UpdateBillDto, PayBillDto } from './dto/bills.dto';
 
 @Injectable()
 export class BillsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private settingsService: SettingsService,
+  ) {}
 
   async create(userId: string, dto: CreateBillDto) {
     const nextDueAt = this.calculateNextDueDate(dto.dueDay);
+    const currency = await this.settingsService.getCurrency(userId);
 
     return this.prisma.bill.create({
       data: {
         userId,
         name: dto.name,
         amount: dto.amount,
+        currency,
         dueDay: dto.dueDay,
         frequency: dto.frequency,
         categoryId: dto.categoryId,
@@ -146,6 +152,9 @@ export class BillsService {
       throw new NotFoundException('Account not found');
     }
 
+    // Get currency from settings
+    const currency = await this.settingsService.getCurrency(userId);
+
     const nextDueAt = this.calculateNextDueDate(bill.dueDay, bill.frequency);
     const now = new Date();
 
@@ -160,7 +169,7 @@ export class BillsService {
           categoryId: bill.categoryId,
           type: 'EXPENSE',
           amount: paymentAmount,
-          currency: bill.currency,
+          currency,
           description: `Payment for ${bill.name}`,
           date: now,
           notes: payDto.notes || `Bill payment - ${bill.name}`,

@@ -15,6 +15,7 @@ import { SavingsGoalsModule } from './modules/savings-goals/savings-goals.module
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { SearchModule } from './modules/search/search.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { SettingsModule } from './modules/settings/settings.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     NotificationsModule,
     SearchModule,
     ReportsModule,
+    SettingsModule,
   ],
 })
 export class AppModule {}

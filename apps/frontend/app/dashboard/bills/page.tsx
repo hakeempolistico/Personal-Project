@@ -13,13 +13,11 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api-client';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import { currencies } from '@/lib/currencies';
 import { Plus, Calendar, DollarSign, RefreshCw, Trash2, CheckCircle } from 'lucide-react';
 
 const billSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   amount: z.coerce.number().positive('Amount must be positive'),
-  currency: z.string().default('USD'),
   dueDay: z.coerce.number().min(1).max(31),
   frequency: z.string().min(1, 'Frequency is required'),
   categoryId: z.string().optional(),
@@ -59,6 +57,10 @@ interface Account {
   currency: string;
 }
 
+interface Settings {
+  currency: string;
+}
+
 const frequencyLabels: Record<string, string> = {
   WEEKLY: 'Weekly',
   BIWEEKLY: 'Bi-weekly',
@@ -70,6 +72,7 @@ const frequencyLabels: Record<string, string> = {
 export default function BillsPage() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [settings, setSettings] = useState<Settings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [payingBillId, setPayingBillId] = useState<string | null>(null);
@@ -99,27 +102,23 @@ export default function BillsPage() {
   } = useForm<PayBillFormData>();
 
   useEffect(() => {
-    fetchBills();
-    fetchAccounts();
+    fetchData();
   }, []);
 
-  const fetchBills = async () => {
+  const fetchData = async () => {
     try {
-      const data = await apiClient.get<Bill[]>('/bills');
-      setBills(data);
+      const [billsData, accountsData, settingsData] = await Promise.all([
+        apiClient.get<Bill[]>('/bills'),
+        apiClient.get<Account[]>('/accounts'),
+        apiClient.get<Settings>('/settings'),
+      ]);
+      setBills(billsData);
+      setAccounts(accountsData);
+      setSettings(settingsData);
     } catch (error) {
-      console.error('Failed to fetch bills:', error);
+      console.error('Failed to fetch data:', error);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const fetchAccounts = async () => {
-    try {
-      const data = await apiClient.get<Account[]>('/accounts');
-      setAccounts(data);
-    } catch (error) {
-      console.error('Failed to fetch accounts:', error);
     }
   };
 
@@ -131,7 +130,7 @@ export default function BillsPage() {
       toast({ title: 'Bill created successfully!' });
       reset({ frequency: 'MONTHLY', dueDay: 1 });
       setShowModal(false);
-      fetchBills();
+      fetchData();
     } catch (error) {
       console.error('Failed to create bill:', error);
       toast({
@@ -163,7 +162,7 @@ export default function BillsPage() {
       setShowPayModal(false);
       setSelectedBill(null);
       resetPay();
-      fetchBills();
+      fetchData();
     } catch (error) {
       console.error('Failed to pay bill:', error);
       toast({
@@ -182,7 +181,7 @@ export default function BillsPage() {
     try {
       await apiClient.delete(`/bills/${id}`);
       toast({ title: 'Bill deleted successfully!' });
-      fetchBills();
+      fetchData();
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -209,6 +208,8 @@ export default function BillsPage() {
     }
     return <Badge variant="outline">{formatDate(nextDueAt)}</Badge>;
   };
+
+  const displayCurrency = settings?.currency || 'PHP';
 
   const totalMonthly = bills
     .filter((b) => b.isActive)
@@ -247,7 +248,7 @@ export default function BillsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Monthly Total</p>
-                <p className="text-2xl font-bold">{formatCurrency(totalMonthly)}</p>
+                <p className="text-2xl font-bold">{formatCurrency(totalMonthly, displayCurrency)}</p>
               </div>
               <Calendar className="h-8 w-8 text-muted-foreground" />
             </div>
@@ -291,7 +292,7 @@ export default function BillsPage() {
                     <div>
                       <h3 className="font-semibold text-lg">{bill.name}</h3>
                       <p className="text-2xl font-bold text-primary">
-                        {formatCurrency(Number(bill.amount), bill.currency || 'USD')}
+                        {formatCurrency(Number(bill.amount), displayCurrency)}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {frequencyLabels[bill.frequency] || bill.frequency}
@@ -352,26 +353,10 @@ export default function BillsPage() {
               <Input id="modal-name" placeholder="e.g., Internet" {...register('name')} />
               {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="modal-amount">Amount</Label>
-                <Input id="modal-amount" type="number" step="0.01" placeholder="0.00" {...register('amount')} />
-                {errors.amount && <p className="text-sm text-destructive">{errors.amount.message}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="modal-currency">Currency</Label>
-                <select
-                  id="modal-currency"
-                  {...register('currency')}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  {currencies.map((curr) => (
-                    <option key={curr.code} value={curr.code}>
-                      {curr.code} ({curr.symbol})
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="modal-amount">Amount</Label>
+              <Input id="modal-amount" type="number" step="0.01" placeholder="0.00" {...register('amount')} />
+              {errors.amount && <p className="text-sm text-destructive">{errors.amount.message}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="modal-dueDay">Due Day (1-31)</Label>
@@ -406,15 +391,15 @@ export default function BillsPage() {
               </select>
             </div>
             <div className="flex gap-2 justify-end">
-              <button 
-                type="button" 
+              <button
+                type="button"
                 className="h-10 px-4 py-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground text-sm font-medium"
                 onClick={() => setShowModal(false)}
               >
                 Cancel
               </button>
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={isCreating}
                 onClick={() => console.log('Submit button clicked')}
                 className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
@@ -440,7 +425,7 @@ export default function BillsPage() {
                 <option value="">Select an account</option>
                 {accounts.map((acc) => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.name} ({formatCurrency(Number(acc.balance), acc.currency)})
+                    {acc.name} ({formatCurrency(Number(acc.balance), displayCurrency)})
                   </option>
                 ))}
               </select>
@@ -466,8 +451,8 @@ export default function BillsPage() {
               />
             </div>
             <div className="flex gap-2 justify-end">
-              <button 
-                type="button" 
+              <button
+                type="button"
                 className="h-10 px-4 py-2 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground text-sm font-medium"
                 onClick={() => {
                   setShowPayModal(false);
@@ -477,8 +462,8 @@ export default function BillsPage() {
               >
                 Cancel
               </button>
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={payingBillId !== null}
                 className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
               >

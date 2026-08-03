@@ -23,9 +23,14 @@ interface Transaction {
   account?: Account;
 }
 
+interface Settings {
+  currency: string;
+}
+
 export default function DashboardPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [settings, setSettings] = useState<Settings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -42,11 +47,18 @@ export default function DashboardPage() {
       } catch (error) {
         console.error('Failed to fetch transactions:', error);
       }
+      try {
+        const settingsData = await apiClient.get<Settings>('/settings');
+        setSettings(settingsData);
+      } catch (error) {
+        console.error('Failed to fetch settings:', error);
+      }
       setIsLoading(false);
     };
     fetchData();
   }, []);
 
+  const displayCurrency = settings?.currency || 'PHP';
   const totalBalance = accounts.reduce((sum, acc) => sum + parseFloat(acc.balance), 0);
 
   const currentMonth = new Date().getMonth();
@@ -92,7 +104,7 @@ export default function DashboardPage() {
             <CardTitle className="text-sm font-medium">Total Balance</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalBalance)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(totalBalance, displayCurrency)}</div>
             <p className="text-xs text-muted-foreground">
               Across all accounts
             </p>
@@ -105,7 +117,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {formatCurrency(monthlyIncome)}
+              {formatCurrency(monthlyIncome, displayCurrency)}
             </div>
             <p className="text-xs text-muted-foreground">This month</p>
           </CardContent>
@@ -117,7 +129,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
-              {formatCurrency(monthlyExpenses)}
+              {formatCurrency(monthlyExpenses, displayCurrency)}
             </div>
             <p className="text-xs text-muted-foreground">This month</p>
           </CardContent>
@@ -156,7 +168,7 @@ export default function DashboardPage() {
                     </p>
                   </div>
                   <p className={`font-medium ${trans.type === 'INCOME' ? 'text-green-600' : 'text-red-600'}`}>
-                    {trans.type === 'INCOME' ? '+' : '-'}{formatCurrency(parseFloat(trans.amount))}
+                    {trans.type === 'INCOME' ? '+' : '-'}{formatCurrency(parseFloat(trans.amount), displayCurrency)}
                   </p>
                 </div>
               ))}

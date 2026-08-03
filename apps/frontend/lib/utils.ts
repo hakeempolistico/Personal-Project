@@ -7,7 +7,7 @@ export function cn(...inputs: ClassValue[]) {
 
 export function formatCurrency(
   amount: number,
-  currency: string = 'USD'
+  currency: string = 'PHP'
 ): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',

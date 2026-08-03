@@ -1,19 +1,24 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { CreateAccountDto, UpdateAccountDto } from './dto/accounts.dto';
 
 @Injectable()
 export class AccountsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private settingsService: SettingsService,
+  ) {}
 
   async create(userId: string, dto: CreateAccountDto) {
+    const currency = await this.settingsService.getCurrency(userId);
     return this.prisma.account.create({
       data: {
         userId,
         name: dto.name,
         type: dto.type,
         balance: dto.balance || 0,
-        currency: dto.currency || 'USD',
+        currency,
         icon: dto.icon,
         color: dto.color,
       },
