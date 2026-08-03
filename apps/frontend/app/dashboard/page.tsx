@@ -337,34 +337,35 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Summary */}
-              <div className="flex items-center gap-4 p-3 rounded-lg bg-amber-50 border border-amber-200">
-                <div className="rounded-full bg-amber-500 p-2">
-                  <Clock className="h-4 w-4 text-white" />
+              {/* Summary - only show if there are bills due in 7 days */}
+              {totalDueSoon > 0 && (
+                <div className="flex items-center gap-4 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                  <div className="rounded-full bg-amber-500 p-2">
+                    <Clock className="h-4 w-4 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-amber-800">
+                      {formatCurrency(totalDueSoon, displayCurrency)} due in next 7 days
+                    </p>
+                    <p className="text-xs text-amber-600">
+                      {dueSoonCount} bill{dueSoonCount !== 1 ? 's' : ''} need attention
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-amber-800">
-                    {formatCurrency(totalDueSoon, displayCurrency)} due in next 7 days
-                  </p>
-                  <p className="text-xs text-amber-600">
-                    {dueSoonCount} bill{dueSoonCount !== 1 ? 's' : ''} need attention
-                  </p>
-                </div>
-              </div>
+              )}
 
               {/* Bill List */}
               <div className="space-y-3">
                 {upcomingBills.slice(0, 5).map((bill) => {
-                  const status = getBillStatus(bill.nextDueAt);
-                  const StatusIcon = status.icon;
+                  const days = getDaysUntilDue(bill.nextDueAt);
                   return (
                     <div
                       key={bill.id}
                       className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent/50 transition-colors"
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`rounded-full p-2 ${status.color}`}>
-                          <StatusIcon className="h-4 w-4" />
+                        <div className={`rounded-full p-2 ${days <= 0 ? 'bg-green-100' : 'bg-green-100'}`}>
+                          <CheckCircle className="h-4 w-4 text-green-600" />
                         </div>
                         <div>
                           <p className="font-medium">{bill.name}</p>
@@ -378,8 +379,8 @@ export default function DashboardPage() {
                       <div className="flex items-center gap-3">
                         <div className="text-right">
                           <p className="font-medium">{formatCurrency(parseFloat(bill.amount), displayCurrency)}</p>
-                          <Badge variant={status.variant} className="text-xs">
-                            {status.label}
+                          <Badge variant="success" className="text-xs">
+                            {days <= 0 ? 'Paid' : formatDateShort(bill.nextDueAt)}
                           </Badge>
                         </div>
                         <Button
