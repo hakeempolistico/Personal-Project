@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 
 @Injectable()
-export class PlaceholderService {
-  getMessage() {
+export class BudgetsService {
+  getBudgets() {
     return { message: 'Feature coming soon' };
   }
 }

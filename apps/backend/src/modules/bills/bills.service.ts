@@ -18,6 +18,7 @@ export class BillsService {
         frequency: dto.frequency,
         isActive: dto.isActive !== undefined ? dto.isActive : true,
         nextDueAt,
+        accountId: dto.accountId,
       },
     });
   }

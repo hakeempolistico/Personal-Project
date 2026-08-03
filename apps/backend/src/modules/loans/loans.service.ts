@@ -11,7 +11,7 @@ export class LoansService {
       data: {
         ...dto,
         userId,
-        remainingBalance: dto.principal,
+        remainingBalance: dto.remainingBalance ?? dto.principal,
         isActive: true,
       },
     });

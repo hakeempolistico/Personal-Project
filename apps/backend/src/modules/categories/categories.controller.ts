@@ -2,14 +2,14 @@ import { Controller, Get, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 
-@ApiTags('PLACEHOLDER')
-@Controller('PLACEHOLDER')
+@ApiTags('Categories')
+@Controller('categories')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
-export class PlaceholderController {
+export class CategoriesController {
   @Get()
-  @ApiOperation({ summary: 'Placeholder endpoint' })
-  getMessage() {
+  @ApiOperation({ summary: 'Get all categories' })
+  getCategories() {
     return { message: 'Feature coming soon' };
   }
 }

@@ -24,16 +24,16 @@ export class AccountsController {
     return this.accountsService.findAll(user.id);
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get account by id' })
-  findOne(@Param('id') id: string, @CurrentUser() user: { id: string }) {
-    return this.accountsService.findOne(id, user.id);
-  }
-
   @Get('total')
   @ApiOperation({ summary: 'Get total balance across all accounts' })
   getTotalBalance(@CurrentUser() user: { id: string }) {
     return this.accountsService.getTotalBalance(user.id);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get account by id' })
+  findOne(@Param('id') id: string, @CurrentUser() user: { id: string }) {
+    return this.accountsService.findOne(id, user.id);
   }
 
   @Patch(':id')

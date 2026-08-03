@@ -29,50 +29,41 @@ A modern, scalable personal finance tracking application built with Next.js and 
 ## Project Structure
 
 ```
-personal-finance-tracker/
+Personal-Project/
 ├── apps/
 │   ├── frontend/           # Next.js application
 │   │   ├── app/            # App Router pages
-│   │   ├── components/    # UI components
-│   │   ├── lib/            # Utilities and helpers
+│   │   │   ├── auth/       # Authentication pages
+│   │   │   └── dashboard/   # Dashboard pages
+│   │   ├── components/     # UI components
+│   │   │   └── ui/         # shadcn/ui components
+│   │   ├── lib/            # Utilities and API client
 │   │   ├── hooks/          # Custom React hooks
 │   │   ├── providers/      # Context providers
-│   │   ├── types/          # TypeScript types
-│   │   └── ...
+│   │   └── types/          # TypeScript types
 │   │
-│   └── backend/           # NestJS application
+│   └── backend/            # NestJS application
 │       ├── src/
-│       │   ├── modules/    # Feature modules (Clean Architecture)
-│       │   │   ├── auth/
-│       │   │   ├── users/
-│       │   │   ├── accounts/
-│       │   │   ├── categories/
-│       │   │   ├── transactions/
-│       │   │   ├── bills/
-│       │   │   ├── loans/
-│       │   │   ├── budgets/
-│       │   │   ├── savings-goals/
-│       │   │   ├── reports/
-│       │   │   ├── notifications/
-│       │   │   └── search/
-│       │   ├── common/     # Shared utilities, decorators, guards
-│       │   ├── config/     # Configuration
-│       │   └── main.ts
+│       │   ├── modules/     # Feature modules
+│       │   │   ├── auth/           # Authentication
+│       │   │   ├── users/          # User management
+│       │   │   ├── accounts/       # Bank accounts
+│       │   │   ├── categories/     # Categories (placeholder)
+│       │   │   ├── transactions/   # Financial transactions
+│       │   │   ├── bills/          # Recurring bills
+│       │   │   ├── loans/          # Loan tracking
+│       │   │   ├── budgets/        # Budgets (placeholder)
+│       │   │   ├── savings-goals/   # Savings goals (placeholder)
+│       │   │   ├── reports/        # Reports (placeholder)
+│       │   │   ├── notifications/  # Notifications (placeholder)
+│       │   │   └── search/         # Search (placeholder)
+│       │   ├── common/      # Shared utilities, decorators, guards
+│       │   └── config/      # Configuration
 │       └── prisma/
-│           ├── schema.prisma
-│           └── migrations/
+│           └── schema.prisma
 │
-├── docker/
-│   └── ...
-│
-├── packages/
-│   └── shared/            # Shared types and utilities
-│       └── types/
-│
-├── docker-compose.yml
-├── package.json           # Root workspace package.json
-├── turbo.json             # Turborepo config
-└── README.md
+├── docker-compose.yml      # Docker configuration
+└── package.json            # Root workspace package.json
 ```
 
 ## Clean Architecture (Backend)
@@ -81,20 +72,11 @@ Each module follows Clean Architecture principles:
 
 ```
 modules/{module-name}/
-├── dto/                   # Data Transfer Objects
-│   ├── create-{entity}.dto.ts
-│   ├── update-{entity}.dto.ts
-│   └── {entity}.response.dto.ts
-├── entities/             # Domain entities
-│   └── {entity}.entity.ts
-├── repositories/         # Data access layer
-│   └── {entity}.repository.ts
-├── services/             # Business logic
-│   └── {entity}.service.ts
-├── controllers/          # API endpoints
-│   └── {entity}.controller.ts
-├── {module-name}.module.ts
-└── {module-name}.spec.ts # Unit tests
+├── dto/                    # Data Transfer Objects
+│   └── {entity}.dto.ts
+├── {entity}.controller.ts  # API endpoints
+├── {entity}.service.ts      # Business logic
+└── {module-name}.module.ts
 ```
 
 ## Data Model
@@ -106,7 +88,7 @@ modules/{module-name}/
 - **Category**: Income/expense categories
 - **Transaction**: Financial transactions
 - **Bill**: Recurring bills and subscriptions
-- **Loan**: Loan records
+- **Loan**: Loan records with payment tracking
 - **Budget**: Budget allocations
 - **SavingsGoal**: Savings targets
 - **Notification**: User notifications
@@ -132,6 +114,9 @@ Category
 
 Budget
 └── Category (N:1)
+
+Loan
+└── LoanPayments (1:N)
 ```
 
 ## Security
@@ -139,47 +124,78 @@ Budget
 - All API routes protected with JWT authentication
 - User data isolation at database level (every resource belongs to authenticated user)
 - Password hashing with Bcrypt
-- Input validation with class-validator and Zod
-- Rate limiting and CORS configuration
+- Input validation with class-validator
+- CORS configuration enabled
 
 ## API Design
 
 ### RESTful Endpoints
 
+#### Authentication (`/api/auth`)
 ```
-POST   /api/auth/register
-POST   /api/auth/login
-POST   /api/auth/refresh
-POST   /api/auth/logout
-GET    /api/auth/profile
+POST   /api/auth/register     - Register new user
+POST   /api/auth/login        - User login
+POST   /api/auth/refresh      - Refresh access token
+POST   /api/auth/logout       - Logout user (requires auth)
+```
 
-GET    /api/accounts
-POST   /api/accounts
-GET    /api/accounts/:id
-PATCH  /api/accounts/:id
-DELETE /api/accounts/:id
+#### Users (`/api/users`)
+```
+GET    /api/users/profile     - Get user profile (requires auth)
+PATCH  /api/users/profile     - Update user profile (requires auth)
+PATCH  /api/users/password    - Change password (requires auth)
+```
 
-GET    /api/categories
-POST   /api/categories
-GET    /api/categories/:id
-PATCH  /api/categories/:id
-DELETE /api/categories/:id
+#### Accounts (`/api/accounts`)
+```
+GET    /api/accounts          - List all accounts (requires auth)
+POST   /api/accounts          - Create account (requires auth)
+GET    /api/accounts/total    - Get total balance (requires auth)
+GET    /api/accounts/:id      - Get account by ID (requires auth)
+PATCH  /api/accounts/:id      - Update account (requires auth)
+DELETE /api/accounts/:id      - Delete account (requires auth)
+```
 
-GET    /api/transactions
-POST   /api/transactions
-GET    /api/transactions/:id
-PATCH  /api/transactions/:id
-DELETE /api/transactions/:id
+#### Transactions (`/api/transactions`)
+```
+GET    /api/transactions            - List all transactions (requires auth)
+POST   /api/transactions            - Create transaction (requires auth)
+GET    /api/transactions/stats      - Get monthly statistics (requires auth)
+GET    /api/transactions/:id        - Get transaction by ID (requires auth)
+PATCH  /api/transactions/:id        - Update transaction (requires auth)
+DELETE /api/transactions/:id        - Delete transaction (requires auth)
+```
 
-... (similar pattern for other resources)
+#### Bills (`/api/bills`)
+```
+GET    /api/bills              - List all bills (requires auth)
+POST   /api/bills              - Create bill (requires auth)
+GET    /api/bills/upcoming     - Get upcoming bills (requires auth)
+GET    /api/bills/:id          - Get bill by ID (requires auth)
+PATCH  /api/bills/:id          - Update bill (requires auth)
+PATCH  /api/bills/:id/paid     - Mark bill as paid (requires auth)
+DELETE /api/bills/:id          - Delete bill (requires auth)
+```
 
-GET    /api/reports/financial-summary
-GET    /api/reports/spending-by-category
-GET    /api/reports/income-vs-expenses
+#### Loans (`/api/loans`)
+```
+GET    /api/loans                    - List all loans (requires auth)
+POST   /api/loans                    - Create loan (requires auth)
+GET    /api/loans/:id                - Get loan by ID (requires auth)
+GET    /api/loans/:id/payments       - Get loan payments (requires auth)
+POST   /api/loans/:id/payment        - Record payment (requires auth)
+PATCH  /api/loans/:id                - Update loan (requires auth)
+DELETE /api/loans/:id                - Delete loan (requires auth)
+```
 
-GET    /api/notifications
-
-GET    /api/search?q=query
+#### Placeholder Modules (API ready, frontend pending)
+```
+GET    /api/categories       - Categories (placeholder)
+GET    /api/budgets          - Budgets (placeholder)
+GET    /api/savings-goals    - Savings goals (placeholder)
+GET    /api/reports          - Reports (placeholder)
+GET    /api/notifications    - Notifications (placeholder)
+GET    /api/search?q=        - Search (placeholder)
 ```
 
 ## Frontend Architecture
@@ -188,38 +204,30 @@ GET    /api/search?q=query
 
 ```
 app/
-├── (auth)/
+├── page.tsx                 # Home page
+├── layout.tsx              # Root layout
+├── auth/
 │   ├── login/
+│   │   └── page.tsx
 │   └── register/
-├── (dashboard)/
-│   ├── layout.tsx         # Dashboard layout with sidebar
-│   ├── page.tsx           # Dashboard home
-│   ├── accounts/
-│   ├── categories/
-│   ├── transactions/
-│   ├── bills/
-│   ├── loans/
-│   ├── budgets/
-│   ├── savings-goals/
-│   ├── reports/
-│   └── settings/
-├── api/                   # API route handlers (if needed)
-└── layout.tsx
-```
-
-### Component Organization
-
-```
-components/
-├── ui/                    # shadcn/ui base components
-├── forms/                 # Form components
-├── cards/                 # Card components
-├── charts/                # Data visualization
-├── layout/                # Layout components
-│   ├── sidebar.tsx
-│   ├── header.tsx
-│   └── ...
-└── {feature}/            # Feature-specific components
+│       └── page.tsx
+└── dashboard/
+    ├── layout.tsx          # Dashboard layout
+    ├── page.tsx            # Dashboard home
+    ├── accounts/
+    │   └── page.tsx
+    ├── transactions/
+    │   ├── page.tsx
+    │   └── [id]/
+    │       └── page.tsx
+    ├── bills/
+    │   └── page.tsx
+    ├── loans/
+    │   ├── page.tsx
+    │   └── [id]/
+    │       └── page.tsx
+    └── categories/
+        └── page.tsx
 ```
 
 ## Development Workflow
@@ -233,7 +241,7 @@ components/
 
 ## Environment Variables
 
-### Backend (.env)
+### Backend (`apps/backend/.env`)
 ```
 DATABASE_URL=postgresql://user:password@localhost:5432/finance_tracker
 JWT_SECRET=your-jwt-secret
@@ -242,7 +250,7 @@ PORT=3001
 NODE_ENV=development
 ```
 
-### Frontend (.env.local)
+### Frontend (`apps/frontend/.env.local`)
 ```
 NEXT_PUBLIC_API_URL=http://localhost:3001/api
 ```
@@ -250,5 +258,5 @@ NEXT_PUBLIC_API_URL=http://localhost:3001/api
 ## Docker Services
 
 - **postgres**: PostgreSQL 15 database
-- **backend**: NestJS API server
+- **backend**: NestJS API server (development)
 - **frontend**: Next.js application (development)

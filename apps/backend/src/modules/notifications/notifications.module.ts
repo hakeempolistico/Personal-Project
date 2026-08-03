@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { PlaceholderController } from './notifications.controller';
-import { PlaceholderService } from './notifications.service';
+import { NotificationsController } from './notifications.controller';
+import { NotificationsService } from './notifications.service';
 
 @Module({
-  controllers: [PlaceholderController],
-  providers: [PlaceholderService],
+  controllers: [NotificationsController],
+  providers: [NotificationsService],
 })
 export class NotificationsModule {}

@@ -23,21 +23,22 @@ A modern, scalable, and production-ready Personal Finance Tracker application bu
 ### Infrastructure
 - **Containerization**: Docker + Docker Compose
 
-## Features (Planned)
+## Features
 
-1. ✅ Project setup (Next.js, NestJS, PostgreSQL, Prisma, Docker)
-2. 🔄 Authentication (Register, Login, Logout, Refresh Token, User Profile)
-3. ⬜ Dashboard
-4. ⬜ Accounts
-5. ⬜ Categories
-6. ⬜ Transactions (Income, Expenses, Transfers)
-7. ⬜ Bills
-8. ⬜ Loans
-9. ⬜ Budgets
-10. ⬜ Savings Goals
-11. ⬜ Reports
-12. ⬜ Notifications
-13. ⬜ Global Search
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Project Setup | ✅ Complete | Next.js, NestJS, PostgreSQL, Prisma, Docker |
+| Authentication | ✅ Complete | Register, Login, Logout, Refresh Token, User Profile |
+| Accounts | ✅ Complete | CRUD operations, total balance calculation |
+| Transactions | ✅ Complete | CRUD operations, monthly statistics |
+| Bills | ✅ Complete | CRUD operations, mark as paid, upcoming bills |
+| Loans | ✅ Complete | CRUD operations, payment tracking |
+| Categories | 🔄 Partial | API structure ready, frontend pending |
+| Budgets | 🔄 Partial | API structure ready, frontend pending |
+| Savings Goals | 🔄 Partial | API structure ready, frontend pending |
+| Reports | 🔄 Partial | API structure ready, frontend pending |
+| Notifications | 🔄 Partial | API structure ready, frontend pending |
+| Search | 🔄 Partial | API structure ready, frontend pending |
 
 ## Getting Started
 
@@ -57,58 +58,142 @@ A modern, scalable, and production-ready Personal Finance Tracker application bu
 
 3. Start Docker containers:
    ```bash
-   npm run docker:up
+   docker compose up -d postgres
    ```
 
 4. Generate Prisma client:
    ```bash
-   npm run db:generate
+   cd apps/backend && npx prisma generate
    ```
 
 5. Run database migrations:
    ```bash
-   npm run db:migrate
+   cd apps/backend && npx prisma migrate dev --name init
    ```
 
 6. Start the development servers:
    ```bash
-   npm run dev
+   # Terminal 1: Backend
+   cd apps/backend && npm run start:dev
+
+   # Terminal 2: Frontend
+   cd apps/frontend && npm run dev
    ```
 
 ### Accessing the Application
 
 - Frontend: http://localhost:3000
-- Backend API: http://localhost:3001
+- Backend API: http://localhost:3001/api
 - Swagger Documentation: http://localhost:3001/api/docs
-- Prisma Studio: `npm run prisma:studio -w @finance-tracker/backend`
+- Prisma Studio: `cd apps/backend && npx prisma studio`
+
+## API Endpoints
+
+### Authentication (`/api/auth`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/auth/register` | Register new user |
+| POST | `/auth/login` | User login |
+| POST | `/auth/refresh` | Refresh access token |
+| POST | `/auth/logout` | Logout user |
+
+### Users (`/api/users`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/users/profile` | Get user profile |
+| PATCH | `/users/profile` | Update user profile |
+| PATCH | `/users/password` | Change password |
+
+### Accounts (`/api/accounts`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/accounts` | List all accounts |
+| POST | `/accounts` | Create account |
+| GET | `/accounts/total` | Get total balance |
+| GET | `/accounts/:id` | Get account by ID |
+| PATCH | `/accounts/:id` | Update account |
+| DELETE | `/accounts/:id` | Delete account |
+
+### Transactions (`/api/transactions`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/transactions` | List all transactions |
+| POST | `/transactions` | Create transaction |
+| GET | `/transactions/stats` | Get monthly statistics |
+| GET | `/transactions/:id` | Get transaction by ID |
+| PATCH | `/transactions/:id` | Update transaction |
+| DELETE | `/transactions/:id` | Delete transaction |
+
+### Bills (`/api/bills`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/bills` | List all bills |
+| POST | `/bills` | Create bill |
+| GET | `/bills/upcoming` | Get upcoming bills |
+| GET | `/bills/:id` | Get bill by ID |
+| PATCH | `/bills/:id` | Update bill |
+| PATCH | `/bills/:id/paid` | Mark bill as paid |
+| DELETE | `/bills/:id` | Delete bill |
+
+### Loans (`/api/loans`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/loans` | List all loans |
+| POST | `/loans` | Create loan |
+| GET | `/loans/:id` | Get loan by ID |
+| GET | `/loans/:id/payments` | Get loan payments |
+| POST | `/loans/:id/payment` | Record payment |
+| PATCH | `/loans/:id` | Update loan |
+| DELETE | `/loans/:id` | Delete loan |
 
 ## Project Structure
 
 ```
-personal-finance-tracker/
+Personal-Project/
 ├── apps/
 │   ├── frontend/           # Next.js application
-│   └── backend/            # NestJS application
-├── docker/                 # Docker configuration
-└── packages/               # Shared packages
+│   │   ├── app/             # App Router pages
+│   │   ├── components/      # UI components
+│   │   ├── lib/             # Utilities and API client
+│   │   └── hooks/           # Custom React hooks
+│   └── backend/             # NestJS application
+│       ├── src/
+│       │   ├── modules/     # Feature modules
+│       │   ├── common/      # Shared utilities
+│       │   └── config/      # Configuration
+│       └── prisma/          # Database schema
+├── docker-compose.yml       # Docker configuration
+└── package.json             # Root workspace
 ```
 
 ## Docker Commands
 
 ```bash
-# Start all services
-npm run docker:up
+# Start PostgreSQL
+docker compose up -d postgres
 
 # Stop all services
-npm run docker:down
+docker compose down
 
 # View logs
-npm run docker:logs
+docker compose logs -f
 ```
 
 ## Environment Variables
 
-Copy the `.env.example` files to `.env` in their respective directories and update the values.
+### Backend (`apps/backend/.env`)
+```
+DATABASE_URL=postgresql://finance_user:finance_password@localhost:5432/finance_tracker
+JWT_SECRET=your-jwt-secret
+JWT_REFRESH_SECRET=your-refresh-secret
+PORT=3001
+NODE_ENV=development
+```
+
+### Frontend (`apps/frontend/.env.local`)
+```
+NEXT_PUBLIC_API_URL=http://localhost:3001/api
+```
 
 ## License
 

@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsOptional, IsNumber, IsDateString, IsEnum, Min, Max } from 'class-validator';
+import { Type } from 'class-transformer';
 import { LoanType } from '@prisma/client';
 
 export class CreateLoanDto {
@@ -14,9 +15,10 @@ export class CreateLoanDto {
   @ApiProperty()
   @IsNumber()
   @Min(0)
+  @Type(() => Number)
   principal: number;
 
-  @ApiProperty({ description: 'Currency code (e.g., USD, PHP)', required: false, default: 'USD' })
+  @ApiPropertyOptional({ description: 'Currency code (e.g., USD, PHP)', default: 'USD' })
   @IsString()
   @IsOptional()
   currency?: string;
@@ -25,11 +27,13 @@ export class CreateLoanDto {
   @IsNumber()
   @Min(0)
   @Max(100)
+  @Type(() => Number)
   interestRate: number;
 
   @ApiProperty()
   @IsNumber()
   @Min(1)
+  @Type(() => Number)
   termMonths: number;
 
   @ApiProperty()
@@ -40,4 +44,10 @@ export class CreateLoanDto {
   @IsOptional()
   @IsString()
   accountId?: string;
+
+  @ApiPropertyOptional({ description: 'Remaining balance (defaults to principal if not provided)' })
+  @IsNumber()
+  @IsOptional()
+  @Type(() => Number)
+  remainingBalance?: number;
 }

@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BillFrequency } from '@prisma/client';
 import { IsString, IsNumber, IsEnum, IsOptional, IsBoolean, IsInt, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -28,6 +28,11 @@ export class CreateBillDto {
   @ApiProperty({ enum: BillFrequency, description: 'Billing frequency' })
   @IsEnum(BillFrequency)
   frequency: BillFrequency;
+
+  @ApiPropertyOptional({ description: 'Account ID to pay bill from' })
+  @IsString()
+  @IsOptional()
+  accountId?: string;
 
   @ApiProperty({ description: 'Is active', required: false, default: true })
   @IsBoolean()
