@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsNumber, IsDateString, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsDateString, IsEnum, Min, Max } from 'class-validator';
 import { LoanType } from '@prisma/client';
 
 export class CreateLoanDto {
@@ -8,7 +8,7 @@ export class CreateLoanDto {
   name: string;
 
   @ApiProperty({ enum: LoanType })
-  @IsString()
+  @IsEnum(LoanType)
   type: LoanType;
 
   @ApiProperty()

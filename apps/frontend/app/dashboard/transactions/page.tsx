@@ -79,19 +79,24 @@ export default function TransactionsPage() {
 
   const fetchData = async () => {
     try {
-      const [transData, accData, catData] = await Promise.all([
-        apiClient.get<Transaction[]>('/transactions'),
-        apiClient.get<Account[]>('/accounts'),
-        apiClient.get<Category[]>('/categories'),
-      ]);
+      const transData = await apiClient.get<Transaction[]>('/transactions');
       setTransactions(transData);
+    } catch (error) {
+      console.error('Failed to fetch transactions:', error);
+    }
+    try {
+      const accData = await apiClient.get<Account[]>('/accounts');
       setAccounts(accData);
+    } catch (error) {
+      console.error('Failed to fetch accounts:', error);
+    }
+    try {
+      const catData = await apiClient.get<Category[]>('/categories');
       setCategories(catData);
     } catch (error) {
-      console.error('Failed to fetch data:', error);
-    } finally {
-      setIsLoading(false);
+      console.error('Failed to fetch categories:', error);
     }
+    setIsLoading(false);
   };
 
   const onSubmit = async (data: TransactionFormData) => {

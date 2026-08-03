@@ -7,23 +7,7 @@ type RequestOptions = {
 };
 
 class ApiClient {
-  private accessToken: string | null = null;
-  private refreshToken: string | null = null;
-
-  constructor() {
-    this.loadTokensFromStorage();
-  }
-
-  private loadTokensFromStorage() {
-    if (typeof window !== 'undefined') {
-      this.accessToken = localStorage.getItem('accessToken');
-      this.refreshToken = localStorage.getItem('refreshToken');
-    }
-  }
-
   setTokens(accessToken: string, refreshToken: string) {
-    this.accessToken = accessToken;
-    this.refreshToken = refreshToken;
     if (typeof window !== 'undefined') {
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('refreshToken', refreshToken);
@@ -31,8 +15,6 @@ class ApiClient {
   }
 
   clearTokens() {
-    this.accessToken = null;
-    this.refreshToken = null;
     if (typeof window !== 'undefined') {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
@@ -40,29 +22,30 @@ class ApiClient {
   }
 
   private getHeaders(): Record<string, string> {
-    this.loadTokensFromStorage(); // Always read latest tokens from storage
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
 
-    if (this.accessToken) {
-      headers['Authorization'] = `Bearer ${this.accessToken}`;
+    if (typeof window !== 'undefined') {
+      const accessToken = localStorage.getItem('accessToken');
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+      }
     }
 
     return headers;
   }
 
-  private isTokenExpired(token: string): boolean {
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      return payload.exp * 1000 < Date.now();
-    } catch {
-      return true;
+  private getRefreshToken(): string | null {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('refreshToken');
     }
+    return null;
   }
 
   private async refreshAccessToken(): Promise<boolean> {
-    if (!this.refreshToken) {
+    const refreshToken = this.getRefreshToken();
+    if (!refreshToken) {
       return false;
     }
 
@@ -72,7 +55,7 @@ class ApiClient {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ refreshToken: this.refreshToken }),
+        body: JSON.stringify({ refreshToken }),
       });
 
       if (!response.ok) {
@@ -80,7 +63,7 @@ class ApiClient {
       }
 
       const data = await response.json();
-      this.setTokens(data.accessToken, data.refreshToken || this.refreshToken);
+      this.setTokens(data.accessToken, data.refreshToken || refreshToken);
       return true;
     } catch {
       return false;
@@ -101,6 +84,8 @@ class ApiClient {
     retry = true
   ): Promise<T> {
     const { method = 'GET', body, headers } = options;
+    
+    console.log(`API Request: ${method} ${endpoint}`);
 
     const config: RequestInit = {
       method,
@@ -115,9 +100,12 @@ class ApiClient {
     }
 
     const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+    
+    console.log(`API Response: ${endpoint} - Status: ${response.status}`);
 
     // If unauthorized and we have a refresh token, try to refresh
-    if (response.status === 401 && retry && this.refreshToken) {
+    if (response.status === 401 && retry && this.getRefreshToken()) {
+      console.log('Token expired, refreshing...');
       const refreshed = await this.refreshAccessToken();
       if (refreshed) {
         return this.request<T>(endpoint, options, false);
@@ -131,7 +119,7 @@ class ApiClient {
     return this.request<T>(endpoint);
   }
 
-  async post<T>(endpoint: string, body: unknown): Promise<T> {
+  async post<T>(endpoint: string, body?: unknown): Promise<T> {
     return this.request<T>(endpoint, { method: 'POST', body });
   }
 

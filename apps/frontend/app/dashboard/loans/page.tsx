@@ -129,10 +129,10 @@ export default function LoansPage() {
     return loanTypes.find((t) => t.value === type)?.label || type;
   };
 
-  const totalDebt = loans.reduce((sum, loan) => sum + loan.remainingBalance, 0);
-  const totalPrincipal = loans.reduce((sum, loan) => sum + loan.principal, 0);
+  const totalDebt = loans.reduce((sum, loan) => sum + parseFloat(String(loan.remainingBalance)), 0);
+  const totalPrincipal = loans.reduce((sum, loan) => sum + parseFloat(String(loan.principal)), 0);
   const avgInterestRate = loans.length > 0
-    ? (loans.reduce((sum, loan) => sum + loan.interestRate, 0) / loans.length).toFixed(2)
+    ? (loans.reduce((sum, loan) => sum + parseFloat(String(loan.interestRate)), 0) / loans.length).toFixed(2)
     : '0.00';
 
   return (

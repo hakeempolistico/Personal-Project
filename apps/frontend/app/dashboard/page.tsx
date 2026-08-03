@@ -1,7 +1,81 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatDate } from '@/lib/utils';
+import { apiClient } from '@/lib/api-client';
+
+interface Account {
+  id: string;
+  name: string;
+  type: string;
+  balance: string;
+  currency: string;
+}
+
+interface Transaction {
+  id: string;
+  type: string;
+  amount: string;
+  description: string;
+  date: string;
+  accountId: string;
+  account?: Account;
+}
 
 export default function DashboardPage() {
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const accData = await apiClient.get<Account[]>('/accounts');
+        setAccounts(accData);
+      } catch (error) {
+        console.error('Failed to fetch accounts:', error);
+      }
+      try {
+        const transData = await apiClient.get<Transaction[]>('/transactions');
+        setTransactions(transData);
+      } catch (error) {
+        console.error('Failed to fetch transactions:', error);
+      }
+      setIsLoading(false);
+    };
+    fetchData();
+  }, []);
+
+  const totalBalance = accounts.reduce((sum, acc) => sum + parseFloat(acc.balance), 0);
+
+  const currentMonth = new Date().getMonth();
+  const currentYear = new Date().getFullYear();
+  const monthlyTransactions = transactions.filter((t) => {
+    const date = new Date(t.date);
+    return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+  });
+  const monthlyIncome = monthlyTransactions
+    .filter((t) => t.type === 'INCOME')
+    .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+  const monthlyExpenses = monthlyTransactions
+    .filter((t) => t.type === 'EXPENSE')
+    .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+  const savingsRate = monthlyIncome > 0 ? ((monthlyIncome - monthlyExpenses) / monthlyIncome) * 100 : 0;
+
+  const recentTransactions = transactions.slice(0, 5);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -18,7 +92,7 @@ export default function DashboardPage() {
             <CardTitle className="text-sm font-medium">Total Balance</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(0)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(totalBalance)}</div>
             <p className="text-xs text-muted-foreground">
               Across all accounts
             </p>
@@ -31,7 +105,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {formatCurrency(0)}
+              {formatCurrency(monthlyIncome)}
             </div>
             <p className="text-xs text-muted-foreground">This month</p>
           </CardContent>
@@ -43,7 +117,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
-              {formatCurrency(0)}
+              {formatCurrency(monthlyExpenses)}
             </div>
             <p className="text-xs text-muted-foreground">This month</p>
           </CardContent>
@@ -54,7 +128,7 @@ export default function DashboardPage() {
             <CardTitle className="text-sm font-medium">Savings Rate</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0%</div>
+            <div className="text-2xl font-bold">{savingsRate.toFixed(1)}%</div>
             <p className="text-xs text-muted-foreground">This month</p>
           </CardContent>
         </Card>
@@ -66,10 +140,28 @@ export default function DashboardPage() {
           <CardTitle>Recent Transactions</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            No transactions yet. Start by adding an account and recording your
-            first transaction.
-          </p>
+          {recentTransactions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No transactions yet. Start by adding an account and recording your
+              first transaction.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {recentTransactions.map((trans) => (
+                <div key={trans.id} className="flex justify-between items-center py-2 border-b last:border-0">
+                  <div>
+                    <p className="font-medium">{trans.description || 'No description'}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {trans.account?.name || 'Unknown'} • {formatDate(trans.date)}
+                    </p>
+                  </div>
+                  <p className={`font-medium ${trans.type === 'INCOME' ? 'text-green-600' : 'text-red-600'}`}>
+                    {trans.type === 'INCOME' ? '+' : '-'}{formatCurrency(parseFloat(trans.amount))}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
