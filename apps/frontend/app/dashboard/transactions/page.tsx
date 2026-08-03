@@ -77,7 +77,7 @@ export default function TransactionsPage() {
     },
   });
 
-  const transactionType = watch('type');
+  const transactionType = watch('type') || 'EXPENSE';
 
   useEffect(() => {
     fetchData();
@@ -98,7 +98,9 @@ export default function TransactionsPage() {
     }
     try {
       const catData = await apiClient.get<Category[]>('/categories');
-      setCategories(catData);
+      if (Array.isArray(catData)) {
+        setCategories(catData);
+      }
     } catch (error) {
       console.error('Failed to fetch categories:', error);
     }
@@ -133,7 +135,7 @@ export default function TransactionsPage() {
     return <ArrowLeftRight className="h-5 w-5 text-blue-600" />;
   };
 
-  const filteredCategories = categories.filter((c) => c.type === transactionType || c.type === 'TRANSFER');
+  const filteredCategories = Array.isArray(categories) ? categories.filter((c) => c.type === transactionType || c.type === 'TRANSFER') : [];
 
   return (
     <div className="space-y-6">

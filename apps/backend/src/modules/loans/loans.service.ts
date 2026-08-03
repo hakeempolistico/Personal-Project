@@ -9,9 +9,16 @@ export class LoansService {
   async create(userId: string, dto: CreateLoanDto) {
     return this.prisma.loan.create({
       data: {
-        ...dto,
-        userId,
+        name: dto.name,
+        type: dto.type,
+        principal: dto.principal,
+        currency: dto.currency || 'USD',
+        interestRate: dto.interestRate,
+        termMonths: dto.termMonths,
+        startDate: new Date(dto.startDate),
         remainingBalance: dto.remainingBalance ?? dto.principal,
+        accountId: dto.accountId,
+        userId,
         isActive: true,
       },
     });

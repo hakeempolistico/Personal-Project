@@ -87,9 +87,9 @@ export default function CategoriesPage() {
     return <Tags className="h-5 w-5 text-blue-600" />;
   };
 
-  const incomeCategories = categories.filter((c) => c.type === 'INCOME');
-  const expenseCategories = categories.filter((c) => c.type === 'EXPENSE');
-  const transferCategories = categories.filter((c) => c.type === 'TRANSFER');
+  const incomeCategories = Array.isArray(categories) ? categories.filter((c) => c.type === 'INCOME') : [];
+  const expenseCategories = Array.isArray(categories) ? categories.filter((c) => c.type === 'EXPENSE') : [];
+  const transferCategories = Array.isArray(categories) ? categories.filter((c) => c.type === 'TRANSFER') : [];
 
   return (
     <div className="space-y-6">
