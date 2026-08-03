@@ -40,10 +40,9 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Token refreshed successfully', type: AuthResponseDto })
   @ApiResponse({ status: 401, description: 'Invalid refresh token' })
   async refreshToken(
-    @CurrentUser('id') userId: string,
     @Body() refreshTokenDto: RefreshTokenDto,
   ): Promise<AuthResponseDto> {
-    return this.authService.refreshToken(userId, refreshTokenDto.refreshToken);
+    return this.authService.refreshTokenFromRefreshToken(refreshTokenDto.refreshToken);
   }
 
   @Post('logout')

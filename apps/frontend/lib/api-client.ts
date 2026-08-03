@@ -11,6 +11,10 @@ class ApiClient {
   private refreshToken: string | null = null;
 
   constructor() {
+    this.loadTokensFromStorage();
+  }
+
+  private loadTokensFromStorage() {
     if (typeof window !== 'undefined') {
       this.accessToken = localStorage.getItem('accessToken');
       this.refreshToken = localStorage.getItem('refreshToken');
@@ -36,6 +40,7 @@ class ApiClient {
   }
 
   private getHeaders(): Record<string, string> {
+    this.loadTokensFromStorage(); // Always read latest tokens from storage
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -45,6 +50,41 @@ class ApiClient {
     }
 
     return headers;
+  }
+
+  private isTokenExpired(token: string): boolean {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.exp * 1000 < Date.now();
+    } catch {
+      return true;
+    }
+  }
+
+  private async refreshAccessToken(): Promise<boolean> {
+    if (!this.refreshToken) {
+      return false;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ refreshToken: this.refreshToken }),
+      });
+
+      if (!response.ok) {
+        return false;
+      }
+
+      const data = await response.json();
+      this.setTokens(data.accessToken, data.refreshToken || this.refreshToken);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async handleResponse<T>(response: Response): Promise<T> {
@@ -57,7 +97,8 @@ class ApiClient {
 
   private async request<T>(
     endpoint: string,
-    options: RequestOptions = {}
+    options: RequestOptions = {},
+    retry = true
   ): Promise<T> {
     const { method = 'GET', body, headers } = options;
 
@@ -74,6 +115,15 @@ class ApiClient {
     }
 
     const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+
+    // If unauthorized and we have a refresh token, try to refresh
+    if (response.status === 401 && retry && this.refreshToken) {
+      const refreshed = await this.refreshAccessToken();
+      if (refreshed) {
+        return this.request<T>(endpoint, options, false);
+      }
+    }
+
     return this.handleResponse<T>(response);
   }
 

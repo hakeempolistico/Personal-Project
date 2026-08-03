@@ -128,6 +128,61 @@ export class AuthService {
     };
   }
 
+  async refreshTokenFromRefreshToken(refreshToken: string): Promise<AuthResponseDto> {
+    // Decode the refresh token to get the user ID
+    let payload: { sub: string; email: string };
+    try {
+      payload = await this.jwtService.verifyAsync(refreshToken, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    // Find user
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        refreshToken: true,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    // Verify refresh token matches stored hash
+    if (!user.refreshToken) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    const isRefreshTokenValid = await bcrypt.compare(refreshToken, user.refreshToken);
+
+    if (!isRefreshTokenValid) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    // Generate new tokens
+    const tokens = await this.generateTokens(user.id, user.email);
+
+    // Update refresh token
+    await this.updateRefreshToken(user.id, tokens.refreshToken);
+
+    return {
+      ...tokens,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      },
+    };
+  }
+
   async logout(userId: string): Promise<void> {
     await this.prisma.user.update({
       where: { id: userId },
