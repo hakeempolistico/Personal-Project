@@ -182,28 +182,38 @@ function connectToDeepgram() {
       resolve()
     })
 
-    deepgramSocket.on('message', (event) => {
+    deepgramSocket.on('message', (message) => {
       try {
         let data
+        let rawMessage = message
         
-        // Handle Electron's special Buffer format: {"type":"Buffer","data":[...]}
-        if (event.data && event.data.type === 'Buffer' && Array.isArray(event.data.data)) {
-          const buf = Buffer.from(event.data.data)
-          data = JSON.parse(buf.toString('utf8'))
-          log.info('[Deepgram] Parsed Electron Buffer message')
+        // Deepgram sends JSON text messages
+        if (typeof message === 'string') {
+          data = JSON.parse(message)
+          log.info('[Deepgram] String message parsed')
         }
-        // Handle raw string messages
-        else if (typeof event.data === 'string') {
-          data = JSON.parse(event.data)
-          log.info('[Deepgram] Parsed string message')
+        // Handle Buffer object (from ws library)
+        else if (Buffer.isBuffer(message)) {
+          data = JSON.parse(message.toString('utf8'))
+          log.info('[Deepgram] Buffer message parsed')
         }
-        // Handle Node.js Buffer
-        else if (Buffer.isBuffer(event.data)) {
-          data = JSON.parse(event.data.toString('utf8'))
-          log.info('[Deepgram] Parsed Buffer message')
+        // Handle Electron's serialized Buffer format
+        else if (message && message.type === 'Buffer' && message.data) {
+          data = JSON.parse(Buffer.from(message.data).toString('utf8'))
+          log.info('[Deepgram] Electron Buffer parsed')
+        }
+        // Handle object with data property (some ws configurations)
+        else if (message && typeof message === 'object' && message.data) {
+          if (typeof message.data === 'string') {
+            data = JSON.parse(message.data)
+            log.info('[Deepgram] Object with string data parsed')
+          } else if (Buffer.isBuffer(message.data)) {
+            data = JSON.parse(message.data.toString('utf8'))
+            log.info('[Deepgram] Object with Buffer data parsed')
+          }
         }
         else {
-          log.warn('[Deepgram] Unknown message format:', typeof event.data)
+          log.warn('[Deepgram] Unknown message format:', typeof message, JSON.stringify(message).substring(0, 100))
           return
         }
         
