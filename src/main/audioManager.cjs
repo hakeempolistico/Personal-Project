@@ -27,36 +27,38 @@ class AudioManager {
       })
 
       ffmpegProc.on('close', (code) => {
+        log.info('FFmpeg device list stderr:', stderr)
+        
         // Parse ffmpeg device list to get indices
         const deviceMap = new Map()
         const lines = stderr.split('\n')
         
+        // Look for input devices section
+        let inInputSection = false
         for (const line of lines) {
-          // Match lines like "[AVFoundation input device @ 0x...] \"MacBook Pro Microphone\""
-          const match = line.match(/\[AVFoundation input device @ [^\]]+\] \"([^\"]+)\"/)
-          if (match) {
-            const deviceName = match[1]
-            // Find the index from the next line or pattern
-            const indexMatch = line.match(/\[(\d+)\]/)
-            if (indexMatch) {
-              deviceMap.set(deviceName, indexMatch[1])
+          if (line.includes('[AVFoundation input devices]')) {
+            inInputSection = true
+            continue
+          }
+          if (line.includes('[AVFoundation output devices]')) {
+            break // Stop after output devices
+          }
+          
+          if (inInputSection) {
+            // Match lines like "[0] Device Name"
+            const match = line.trim().match(/^\[(\d+)\]\s+(.+)$/)
+            if (match) {
+              const index = match[1]
+              const name = match[2].replace(/\[.*?\]\s*$/, '').trim()
+              if (name && !name.includes('=')) {
+                deviceMap.set(name, index)
+                log.info(`Found device: "${name}" at index ${index}`)
+              }
             }
           }
         }
         
-        // Also parse lines like "[0] MacBook Pro Microphone"
-        for (const line of lines) {
-          const indexedMatch = line.match(/\[(\d+)\]\s+(.+?)(?:\s*\[|$)/)
-          if (indexedMatch) {
-            const index = indexedMatch[1]
-            const name = indexedMatch[2].trim()
-            if (!deviceMap.has(name)) {
-              deviceMap.set(name, index)
-            }
-          }
-        }
-        
-        log.info('FFmpeg device map:', Object.fromEntries(deviceMap))
+        log.info('Parsed ffmpeg device map:', Object.fromEntries(deviceMap))
         
         // Now use system_profiler for more details
         const proc = spawn('system_profiler', ['SPAudioDataType', '-json'])
