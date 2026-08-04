@@ -16,13 +16,27 @@ class Summarizer {
 
     this.checkingPromise = (async () => {
       try {
-        const response = await fetch(`${this.ollamaUrl}/api/tags`, {
+        // First check if Ollama server is running
+        const versionResponse = await fetch(`${this.ollamaUrl}/api/version`, {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' }
         })
 
-        if (response.ok) {
-          const data = await response.json()
+        if (!versionResponse.ok) {
+          log.warn('Ollama server not responding correctly')
+          this.isAvailable = false
+          this.checkingPromise = null
+          return this.isAvailable
+        }
+
+        // Then check if model is available
+        const modelsResponse = await fetch(`${this.ollamaUrl}/api/tags`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        })
+
+        if (modelsResponse.ok) {
+          const data = await modelsResponse.json()
           const hasModel = data.models?.some(m => m.name.startsWith(this.model))
           
           if (hasModel) {
@@ -30,10 +44,11 @@ class Summarizer {
             this.isAvailable = true
           } else {
             log.warn('Ollama available but model not found:', this.model)
+            log.info('Available models:', data.models?.map(m => m.name).join(', ') || 'none')
             this.isAvailable = false
           }
         } else {
-          log.warn('Ollama responded with status:', response.status)
+          log.warn('Ollama responded with status:', modelsResponse.status)
           this.isAvailable = false
         }
       } catch (error) {
