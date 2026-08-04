@@ -1,0 +1,55 @@
+{
+  "name": "meeting-transcriber",
+  "version": "1.0.0",
+  "description": "Real-time meeting transcription and summarization app",
+  "main": "dist-electron/main/index.js",
+  "type": "module",
+  "author": "MeetingTranscriber",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && electron-builder",
+    "preview": "vite preview",
+    "electron:dev": "vite build && electron ."
+  },
+  "dependencies": {
+    "electron-log": "^5.1.7",
+    "microphone-stream": "^6.0.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "electron": "^31.3.1",
+    "electron-builder": "^24.13.3",
+    "postcss": "^8.4.40",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.7",
+    "vite": "^5.4.0",
+    "vite-plugin-electron": "^0.28.7",
+    "vite-plugin-electron-renderer": "^0.14.5"
+  },
+  "build": {
+    "appId": "com.meetingtranscriber.app",
+    "productName": "MeetingTranscriber",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Office"
+    }
+  }
+}

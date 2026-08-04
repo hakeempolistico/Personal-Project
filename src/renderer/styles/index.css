@@ -1,0 +1,112 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #111827 0%, #1f2937 100%);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1f2937;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+/* Recording animation */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.3);
+    opacity: 0;
+  }
+}
+
+.recording-ring {
+  animation: pulse-ring 1.5s ease-out infinite;
+}
+
+/* Audio level bar animation */
+@keyframes audio-level {
+  0%, 100% { height: 4px; }
+  50% { height: 20px; }
+}
+
+/* Transcript entry animation */
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.transcript-entry {
+  animation: slide-in 0.3s ease-out;
+}
+
+/* Speaker badge colors */
+.speaker-badge-1 { background: #3b82f6; }
+.speaker-badge-2 { background: #10b981; }
+.speaker-badge-3 { background: #f59e0b; }
+.speaker-badge-4 { background: #ef4444; }
+.speaker-badge-5 { background: #8b5cf6; }
+.speaker-badge-6 { background: #ec4899; }
+.speaker-badge-7 { background: #06b6d4; }
+.speaker-badge-8 { background: #84cc16; }
+
+/* Glass effect */
+.glass {
+  background: rgba(31, 41, 55, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Button hover effects */
+.btn-primary {
+  @apply bg-primary-600 hover:bg-primary-500 text-white font-medium py-3 px-6 rounded-xl transition-all duration-200;
+  @apply hover:shadow-lg hover:shadow-primary-500/25 active:scale-95;
+}
+
+.btn-secondary {
+  @apply bg-gray-700 hover:bg-gray-600 text-white font-medium py-3 px-6 rounded-xl transition-all duration-200;
+  @apply border border-gray-600 hover:border-gray-500 active:scale-95;
+}
+
+.btn-danger {
+  @apply bg-red-600 hover:bg-red-500 text-white font-medium py-3 px-6 rounded-xl transition-all duration-200;
+  @apply hover:shadow-lg hover:shadow-red-500/25 active:scale-95;
+}
