@@ -24,19 +24,12 @@ function App() {
     loadDevices()
     checkOllama()
     
-    // Set Deepgram API key (use environment variable or prompt user)
+    // Set Deepgram API key from localStorage
     const deepgramKey = localStorage.getItem('deepgramKey')
     if (deepgramKey) {
       window.electronAPI?.setDeepgramKey(deepgramKey)
-    } else {
-      // For demo, use a placeholder - user should set their own key
-      // Get free key at https://console.deepgram.com/
-      const demoKey = prompt('Enter your Deepgram API key (get free key at https://console.deepgram.com/):')
-      if (demoKey) {
-        localStorage.setItem('deepgramKey', demoKey)
-        window.electronAPI?.setDeepgramKey(demoKey)
-      }
     }
+    // User should set their Deepgram key via the ControlPanel UI
   }, [])
 
   // Setup electron event listeners
