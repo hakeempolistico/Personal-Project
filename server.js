@@ -281,10 +281,12 @@ wss.on('connection', (ws) => {
     if (Buffer.isBuffer(message) || message instanceof ArrayBuffer) {
       audioChunkCount++;
       const buffer = Buffer.isBuffer(message) ? message : Buffer.from(message);
-      console.log(`[Audio] Received chunk #${audioChunkCount}, size: ${buffer.length} bytes`);
+      console.log(`[Audio] Chunk #${audioChunkCount}, size: ${buffer.length} bytes`);
       
-      if (audioChunkCount === 1) {
-        console.log('[Audio] First chunk sample (first 20 bytes):', buffer.slice(0, 20).toString('hex'));
+      if (audioChunkCount <= 3) {
+        // Check if audio data looks valid (non-zero samples)
+        const int16 = new Int16Array(buffer.buffer, buffer.byteOffset, Math.min(buffer.length / 2, 10));
+        console.log('[Audio] First 10 samples (Int16):', Array.from(int16).join(', '));
       }
       
       // Send raw audio to Deepgram
