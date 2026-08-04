@@ -1,12 +1,38 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path'
-import { fileURLToPath } from 'url'
+const { defineConfig } = require('vite')
+const react = require('@vitejs/plugin-react')
+const electronPlugin = require('vite-plugin-electron').default
+const rendererPlugin = require('vite-plugin-electron-renderer').default
+const path = require('path')
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-
-export default defineConfig({
-  plugins: [react()],
+module.exports = defineConfig({
+  plugins: [
+    react(),
+    electronPlugin([
+      {
+        entry: 'src/main/index.cjs',
+        vite: {
+          build: {
+            outDir: 'dist-electron/main',
+            rollupOptions: {
+              external: ['electron', 'electron-log']
+            }
+          }
+        }
+      },
+      {
+        entry: 'src/preload/preload.cjs',
+        onstart(options) {
+          options.reload()
+        },
+        vite: {
+          build: {
+            outDir: 'dist-electron/preload'
+          }
+        }
+      }
+    ]),
+    rendererPlugin()
+  ],
   build: {
     outDir: 'dist',
     emptyOutDir: true
@@ -14,15 +40,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src/renderer')
-    }
-  },
-  server: {
-    port: 5173,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3000',
-        changeOrigin: true
-      }
     }
   }
 })
