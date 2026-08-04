@@ -14,7 +14,7 @@ module.exports = defineConfig(({ command, mode }) => ({
           build: {
             outDir: 'dist-electron/main',
             rollupOptions: {
-              external: ['electron', 'electron-log']
+              external: ['electron', 'electron-log', 'ws', 'bufferutil', 'utf-8-validate']
             }
           }
         }
