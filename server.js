@@ -280,9 +280,13 @@ wss.on('connection', (ws) => {
     // Check if message is binary (raw audio)
     if (Buffer.isBuffer(message) || message instanceof ArrayBuffer) {
       audioChunkCount++;
-      if (audioChunkCount % 100 === 0) {
-        console.log(`Audio chunks sent: ${audioChunkCount}`);
+      const buffer = Buffer.isBuffer(message) ? message : Buffer.from(message);
+      console.log(`[Audio] Received chunk #${audioChunkCount}, size: ${buffer.length} bytes`);
+      
+      if (audioChunkCount === 1) {
+        console.log('[Audio] First chunk sample (first 20 bytes):', buffer.slice(0, 20).toString('hex'));
       }
+      
       // Send raw audio to Deepgram
       if (deepgramSocket && deepgramSocket.readyState === 1) {
         deepgramSocket.send(message);
