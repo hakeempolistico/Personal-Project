@@ -27,7 +27,7 @@ class AudioManager {
           id: device.deviceId,
           label: device.label || `Microphone ${device.deviceId.slice(0, 8)}`,
           isBlackHole: device.label?.toLowerCase().includes('blackhole') ||
-                       device.label?.toLowerCase().includes('virtual')
+                       device.label?.toLowerCase().includes('black hole')
         }));
 
       return audioInputs;
