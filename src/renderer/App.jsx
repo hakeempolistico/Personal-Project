@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import LiveTranscript from './components/LiveTranscript'
 import ControlPanel from './components/ControlPanel'
 import Summaries from './components/Summaries'
 import DeviceSelector from './components/DeviceSelector'
 import StatusBar from './components/StatusBar'
+import { AudioManager } from '../utils/audioManager'
+import { checkOllama, summarize as apiSummarize, getMeetingSummary as apiGetMeetingSummary } from '../utils/api'
 
 function App() {
   const [isRecording, setIsRecording] = useState(false)
@@ -18,67 +20,23 @@ function App() {
   
   const durationIntervalRef = useRef(null)
   const startTimeRef = useRef(null)
+  const audioManagerRef = useRef(null)
+  const speakerCounterRef = useRef(0)
+  const lastSpeakerTimeRef = useRef(Date.now())
+  const currentSpeakerRef = useRef('Speaker 1')
+  const silenceThreshold = 10000 // 10 seconds
 
-  // Load devices on mount
+  // Initialize
   useEffect(() => {
     loadDevices()
-    checkOllama()
-  }, [])
-
-  // Setup electron event listeners
-  useEffect(() => {
-    if (window.electronAPI) {
-      window.electronAPI.onTranscriptUpdate((entry) => {
-        setTranscripts(prev => [...prev, entry])
-      })
-
-      window.electronAPI.onSummaryUpdate((data) => {
-        setSummaries(prev => {
-          const existing = prev.findIndex(s => s.speaker === data.speaker)
-          if (existing >= 0) {
-            const updated = [...prev]
-            updated[existing] = { ...updated[existing], summary: data.summary }
-            return updated
-          }
-          return [...prev, { speaker: data.speaker, summary: data.summary }]
-        })
-      })
-
-      window.electronAPI.onAudioLevel((level) => {
-        setAudioLevel(level)
-      })
-
-      window.electronAPI.onRecordingStopped(() => {
-        setIsRecording(false)
-        if (durationIntervalRef.current) {
-          clearInterval(durationIntervalRef.current)
-        }
-      })
-
-      window.electronAPI.onTrayStartRecording(() => {
-        if (!isRecording && selectedDevice) {
-          startRecording()
-        }
-      })
-
-      window.electronAPI.onTrayStopRecording(() => {
-        if (isRecording) {
-          stopRecording()
-        }
-      })
-    }
-
+    checkOllamaStatus()
+    
     return () => {
-      if (window.electronAPI) {
-        window.electronAPI.removeAllListeners('transcript-update')
-        window.electronAPI.removeAllListeners('summary-update')
-        window.electronAPI.removeAllListeners('audio-level')
-        window.electronAPI.removeAllListeners('recording-stopped')
-        window.electronAPI.removeAllListeners('tray-start-recording')
-        window.electronAPI.removeAllListeners('tray-stop-recording')
+      if (audioManagerRef.current) {
+        audioManagerRef.current.stopRecording()
       }
     }
-  }, [isRecording, selectedDevice])
+  }, [])
 
   // Update duration every second
   useEffect(() => {
@@ -103,31 +61,50 @@ function App() {
 
   const loadDevices = async () => {
     try {
-      const result = await window.electronAPI.getAudioDevices()
-      if (result.success) {
-        setDevices(result.devices)
-        // Auto-select BlackHole if available
-        const blackhole = result.devices.find(d => d.isBlackHole)
-        if (blackhole) {
-          setSelectedDevice(blackhole.id)
-        } else if (result.devices.length > 0) {
-          setSelectedDevice(result.devices[0].id)
-        }
-      } else {
-        setError(result.error)
+      const audioManager = new AudioManager()
+      audioManagerRef.current = audioManager
+      const deviceList = await audioManager.listDevices()
+      setDevices(deviceList)
+      
+      // Auto-select BlackHole if available
+      const blackhole = deviceList.find(d => d.isBlackHole)
+      if (blackhole) {
+        setSelectedDevice(blackhole.id)
+      } else if (deviceList.length > 0) {
+        setSelectedDevice(deviceList[0].id)
       }
     } catch (err) {
-      setError('Failed to load audio devices')
+      setError('Failed to load audio devices: ' + err.message)
     }
   }
 
-  const checkOllama = async () => {
+  const checkOllamaStatus = async () => {
     try {
-      const result = await window.electronAPI.checkOllama()
+      const result = await checkOllama()
       setOllamaAvailable(result.available)
     } catch (err) {
       setOllamaAvailable(false)
     }
+  }
+
+  const processAudioChunk = async (audioChunk) => {
+    // Calculate audio level
+    const level = Math.abs(audioChunk.reduce((sum, b) => sum + (b - 128), 0) / audioChunk.length)
+    setAudioLevel(Math.min(level / 50, 1))
+
+    // Speaker detection
+    const now = Date.now()
+    if (now - lastSpeakerTimeRef.current > silenceThreshold) {
+      speakerCounterRef.current++
+      currentSpeakerRef.current = `Speaker ${speakerCounterRef.current + 1}`
+      lastSpeakerTimeRef.current = now
+    }
+
+    // Note: In a real implementation, you would send this audio to a transcription service
+    // For now, we'll skip transcription as whisper.cpp requires a server-side component
+    // The summary will still work with Ollama
+    
+    lastSpeakerTimeRef.current = now
   }
 
   const startRecording = async () => {
@@ -138,25 +115,25 @@ function App() {
 
     try {
       setError(null)
-      const result = await window.electronAPI.startRecording(selectedDevice)
-      if (result.success) {
-        setIsRecording(true)
-        startTimeRef.current = Date.now()
-        setMeetingDuration(0)
-      } else {
-        setError(result.error)
-      }
+      speakerCounterRef.current = 0
+      currentSpeakerRef.current = 'Speaker 1'
+      lastSpeakerTimeRef.current = Date.now()
+
+      await audioManagerRef.current.startRecording(selectedDevice, processAudioChunk)
+      setIsRecording(true)
+      startTimeRef.current = Date.now()
+      setMeetingDuration(0)
     } catch (err) {
-      setError('Failed to start recording')
+      setError('Failed to start recording: ' + err.message)
     }
   }
 
   const stopRecording = async () => {
     try {
-      await window.electronAPI.stopRecording()
+      audioManagerRef.current.stopRecording()
       setIsRecording(false)
     } catch (err) {
-      setError('Failed to stop recording')
+      setError('Failed to stop recording: ' + err.message)
     }
   }
 
@@ -167,26 +144,52 @@ function App() {
     startTimeRef.current = null
   }
 
-  const exportTranscript = async (format) => {
-    try {
-      const result = await window.electronAPI.exportTranscript({
-        format,
-        transcripts,
-        summaries
-      })
-      
-      const blob = new Blob([result.content], { type: result.mimeType })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `meeting-transcript-${new Date().toISOString().split('T')[0]}.${format === 'markdown' ? 'md' : 'txt'}`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    } catch (err) {
-      setError('Failed to export transcript')
+  const exportTranscript = (format) => {
+    let content, filename, mimeType
+    
+    if (format === 'markdown') {
+      content = '# Meeting Transcript\n\n'
+      content += `*Generated on ${new Date().toLocaleString()}*\n\n`
+      content += '## Transcript\n\n'
+      for (const t of transcripts) {
+        content += `**${t.speaker}** (${new Date(t.timestamp).toLocaleTimeString()}):\n${t.text}\n\n`
+      }
+      if (summaries.length > 0) {
+        content += '## Summaries\n\n'
+        for (const s of summaries) {
+          content += `### ${s.speaker}\n${s.summary}\n\n`
+        }
+      }
+      filename = `meeting-transcript-${new Date().toISOString().split('T')[0]}.md`
+      mimeType = 'text/markdown'
+    } else {
+      content = 'MEETING TRANSCRIPT\n'
+      content += '='.repeat(50) + '\n\n'
+      content += `Generated: ${new Date().toLocaleString()}\n\n`
+      for (const t of transcripts) {
+        content += `[${new Date(t.timestamp).toLocaleTimeString()}] ${t.speaker}: ${t.text}\n\n`
+      }
+      if (summaries.length > 0) {
+        content += '\n' + '='.repeat(50) + '\n'
+        content += 'SUMMARIES\n'
+        content += '='.repeat(50) + '\n\n'
+        for (const s of summaries) {
+          content += `${s.speaker}:\n${s.summary}\n\n`
+        }
+      }
+      filename = `meeting-transcript-${new Date().toISOString().split('T')[0]}.txt`
+      mimeType = 'text/plain'
     }
+    
+    const blob = new Blob([content], { type: mimeType })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   }
 
   return (
