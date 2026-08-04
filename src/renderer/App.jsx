@@ -91,20 +91,49 @@ function App() {
     // Calculate audio level
     const level = Math.abs(audioChunk.reduce((sum, b) => sum + (b - 128), 0) / audioChunk.length)
     setAudioLevel(Math.min(level / 50, 1))
+  }
+
+  const processTranscript = async (text) => {
+    if (!text || text.trim().length < 3) return
 
     // Speaker detection
     const now = Date.now()
     if (now - lastSpeakerTimeRef.current > silenceThreshold) {
       speakerCounterRef.current++
       currentSpeakerRef.current = `Speaker ${speakerCounterRef.current + 1}`
-      lastSpeakerTimeRef.current = now
+    }
+    lastSpeakerTimeRef.current = now
+
+    // Create transcript entry
+    const transcriptEntry = {
+      id: Date.now().toString(),
+      speaker: currentSpeakerRef.current,
+      text: text.trim(),
+      timestamp: new Date().toISOString()
     }
 
-    // Note: In a real implementation, you would send this audio to a transcription service
-    // For now, we'll skip transcription as whisper.cpp requires a server-side component
-    // The summary will still work with Ollama
-    
-    lastSpeakerTimeRef.current = now
+    // Add to transcripts
+    setTranscripts(prev => [...prev, transcriptEntry])
+
+    // Generate summary with Ollama
+    if (ollamaAvailable) {
+      try {
+        const result = await apiSummarize(text, currentSpeakerRef.current)
+        if (result.summary) {
+          setSummaries(prev => {
+            const existing = prev.findIndex(s => s.speaker === currentSpeakerRef.current)
+            if (existing >= 0) {
+              const updated = [...prev]
+              updated[existing] = { ...updated[existing], summary: result.summary }
+              return updated
+            }
+            return [...prev, { speaker: currentSpeakerRef.current, summary: result.summary }]
+          })
+        }
+      } catch (err) {
+        console.error('Summary error:', err)
+      }
+    }
   }
 
   const startRecording = async () => {
@@ -119,7 +148,7 @@ function App() {
       currentSpeakerRef.current = 'Speaker 1'
       lastSpeakerTimeRef.current = Date.now()
 
-      await audioManagerRef.current.startRecording(selectedDevice, processAudioChunk)
+      await audioManagerRef.current.startRecording(selectedDevice, processAudioChunk, processTranscript)
       setIsRecording(true)
       startTimeRef.current = Date.now()
       setMeetingDuration(0)
