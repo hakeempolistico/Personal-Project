@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Real-time meeting transcription and summarization app",
   "main": "dist-electron/main/index.js",
-  "type": "module",
   "author": "MeetingTranscriber",
   "license": "MIT",
   "scripts": {

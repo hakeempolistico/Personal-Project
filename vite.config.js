@@ -1,17 +1,13 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import electron from 'vite-plugin-electron'
-import renderer from 'vite-plugin-electron-renderer'
-import path from 'path'
-import { fileURLToPath } from 'url'
+const { defineConfig } = require('vite')
+const react = require('@vitejs/plugin-react')
+const electronPlugin = require('vite-plugin-electron').default
+const rendererPlugin = require('vite-plugin-electron-renderer').default
+const path = require('path')
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
-export default defineConfig({
+module.exports = defineConfig({
   plugins: [
     react(),
-    electron([
+    electronPlugin([
       {
         entry: 'src/main/index.cjs',
         vite: {
@@ -35,7 +31,7 @@ export default defineConfig({
         }
       }
     ]),
-    renderer()
+    rendererPlugin()
   ],
   build: {
     outDir: 'dist',
