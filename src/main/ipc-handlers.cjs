@@ -184,24 +184,26 @@ function connectToDeepgram() {
 
     deepgramSocket.on('message', (event) => {
       try {
-        log.info('[Deepgram] Received message, type:', typeof event.data, 'isBuffer:', Buffer.isBuffer(event.data))
-        
-        // Handle both string and binary messages
         let data
-        if (typeof event.data === 'string') {
-          log.info('[Deepgram] String message:', event.data.substring(0, 100))
+        
+        // Handle Electron's special Buffer format: {"type":"Buffer","data":[...]}
+        if (event.data && event.data.type === 'Buffer' && Array.isArray(event.data.data)) {
+          const buf = Buffer.from(event.data.data)
+          data = JSON.parse(buf.toString('utf8'))
+          log.info('[Deepgram] Parsed Electron Buffer message')
+        }
+        // Handle raw string messages
+        else if (typeof event.data === 'string') {
           data = JSON.parse(event.data)
-        } else if (Buffer.isBuffer(event.data)) {
-          const text = event.data.toString('utf8')
-          log.info('[Deepgram] Buffer message, length:', event.data.length, 'preview:', text.substring(0, 100))
-          data = JSON.parse(text)
-        } else if (event.data instanceof ArrayBuffer) {
-          const text = Buffer.from(event.data).toString('utf8')
-          log.info('[Deepgram] ArrayBuffer message:', text.substring(0, 100))
-          data = JSON.parse(text)
-        } else {
-          log.warn('[Deepgram] Unknown message type:', typeof event.data, 'constructor:', event.data?.constructor?.name)
-          log.warn('[Deepgram] Raw event:', JSON.stringify(event).substring(0, 200))
+          log.info('[Deepgram] Parsed string message')
+        }
+        // Handle Node.js Buffer
+        else if (Buffer.isBuffer(event.data)) {
+          data = JSON.parse(event.data.toString('utf8'))
+          log.info('[Deepgram] Parsed Buffer message')
+        }
+        else {
+          log.warn('[Deepgram] Unknown message format:', typeof event.data)
           return
         }
         
