@@ -184,6 +184,12 @@ function connectToDeepgram() {
 
     deepgramSocket.on('message', (event) => {
       try {
+        // Skip non-string messages (like pings)
+        if (typeof event.data !== 'string') {
+          log.debug('[Deepgram] Received binary message, skipping')
+          return
+        }
+        
         const data = JSON.parse(event.data)
         
         // Log all Deepgram responses for debugging
