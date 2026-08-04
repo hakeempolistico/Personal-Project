@@ -120,27 +120,31 @@ class AudioManager {
     
     log.info(`Starting recording from device: ${deviceId}`)
 
-    // Use ffmpeg to record audio from the specified device
-    // First, try using sox with the device
+    // Use sox to record audio with proper format conversion
+    // sox -d outputs to default device, then we convert to 16kHz mono raw PCM
     try {
+      // Use sox with explicit format conversion
       this.audioProcess = spawn('sox', [
         '-d',                    // Use default audio device
-        '-t', 'raw',             // Output raw audio
         '-r', '16000',           // Sample rate 16kHz
-        '-e', 'signed-integer',  // 16-bit PCM
-        '-b', '16',
         '-c', '1',               // Mono
+        '-e', 'signed-integer',  // 16-bit PCM
+        '-b', '16',              // 16-bit
+        '-t', 'raw',             // Raw audio output
         '-'                      // Output to stdout
       ])
     } catch (e) {
       log.error('sox failed, trying ffmpeg...')
       
-      // Try ffmpeg
+      // Try ffmpeg with AVFoundation
       try {
+        // Find the device index for the selected device
+        const deviceIndex = ':' + (deviceId === 'MacBook Pro Microphone' ? '1' : '0')
+        
         this.audioProcess = spawn('ffmpeg', [
           '-f', 'avfoundation',   // macOS AVFoundation input
-          '-i', deviceId === 'BlackHole2ch' ? 'BlackHole 2ch' : deviceId,  // Input device
-          '-ar', '16000',         // Sample rate
+          '-i', deviceIndex,      // Input device index
+          '-ar', '16000',         // Sample rate 16kHz
           '-ac', '1',             // Mono
           '-acodec', 'pcm_s16le', // 16-bit signed little-endian PCM
           '-f', 's16le',          // Raw PCM format
@@ -157,20 +161,21 @@ class AudioManager {
     let chunkCount = 0
 
     this.audioProcess.stdout.on('data', (chunk) => {
-      log.info(`[Audio] Received ${chunk.length} bytes from sox`)
+      // Only log every 50 chunks to reduce spam
+      if (chunkCount % 50 === 0) {
+        log.info(`[Audio] Received ${chunk.length} bytes, total chunks: ${chunkCount}`)
+      }
+      
       audioBuffer = Buffer.concat([audioBuffer, chunk])
       
       // Calculate chunk size (0.5 seconds at 16kHz mono 16-bit = 16000 * 0.5 * 2 = 16000 bytes)
       const chunkSize = this.sampleRate * (this.chunkDuration / 1000) * 2
-      
-      log.info(`[Audio] Buffer size: ${audioBuffer.length}, chunk size needed: ${chunkSize}`)
       
       while (audioBuffer.length >= chunkSize) {
         const audioChunk = audioBuffer.slice(0, chunkSize)
         audioBuffer = audioBuffer.slice(chunkSize)
         
         chunkCount++
-        log.info(`[Audio] Sending chunk #${chunkCount}, size: ${audioChunk.length} bytes`)
         
         if (this.chunkCallback) {
           this.chunkCallback(audioChunk)
@@ -180,7 +185,10 @@ class AudioManager {
 
     this.audioProcess.stderr.on('data', (data) => {
       const msg = data.toString()
-      log.info('[sox stderr]:', msg)
+      // Only log the first few lines of sox output
+      if (msg.includes('Input File') || msg.includes('Channels') || msg.includes('Sample Rate')) {
+        log.info('[sox init]:', msg.split('\n').slice(0, 3).join(' | '))
+      }
     })
 
     this.audioProcess.on('error', (error) => {

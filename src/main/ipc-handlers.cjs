@@ -184,13 +184,26 @@ function connectToDeepgram() {
 
     deepgramSocket.on('message', (event) => {
       try {
-        // Skip non-string messages (like pings)
-        if (typeof event.data !== 'string') {
-          log.debug('[Deepgram] Received binary message, skipping')
+        // Handle both string and binary messages
+        let data
+        if (typeof event.data === 'string') {
+          data = JSON.parse(event.data)
+        } else if (event.data instanceof Buffer || event.data instanceof ArrayBuffer) {
+          const buf = Buffer.isBuffer(event.data) ? event.data : Buffer.from(event.data)
+          log.debug('[Deepgram] Binary data length:', buf.length, 'first bytes:', buf.slice(0, 20).toString('hex'))
+          
+          // Try to parse as JSON
+          try {
+            const text = buf.toString('utf8')
+            data = JSON.parse(text)
+          } catch {
+            log.debug('[Deepgram] Binary data is not JSON, skipping')
+            return
+          }
+        } else {
+          log.debug('[Deepgram] Unknown message type:', typeof event.data)
           return
         }
-        
-        const data = JSON.parse(event.data)
         
         // Log all Deepgram responses for debugging
         log.info('[Deepgram] Raw response:', JSON.stringify(data).substring(0, 200))
