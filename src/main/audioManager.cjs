@@ -120,41 +120,37 @@ class AudioManager {
     
     log.info(`Starting recording from device: ${deviceId}`)
 
-    // Use sox to record audio with proper format conversion
-    // sox -d outputs to default device, then we convert to 16kHz mono raw PCM
+    // Use ffmpeg to record audio with proper format conversion
+    // sox on macOS doesn't reliably convert formats, so use ffmpeg instead
     try {
-      // Use sox with explicit format conversion
-      this.audioProcess = spawn('sox', [
-        '-d',                    // Use default audio device
-        '-r', '16000',           // Sample rate 16kHz
-        '-c', '1',               // Mono
-        '-e', 'signed-integer',  // 16-bit PCM
-        '-b', '16',              // 16-bit
-        '-t', 'raw',             // Raw audio output
+      // Map device name to ffmpeg device index
+      // MacBook Pro Microphone is typically :1, others :0
+      let deviceSpecifier = ''
+      if (deviceId === 'MacBook Pro Microphone') {
+        deviceSpecifier = ':1'
+      } else if (deviceId === 'BlackHole 2ch') {
+        deviceSpecifier = ':2'  // BlackHole is usually after built-in mic
+      } else {
+        deviceSpecifier = ':0'
+      }
+      
+      log.info(`Using ffmpeg with device: ${deviceSpecifier}`)
+      
+      this.audioProcess = spawn('ffmpeg', [
+        '-f', 'avfoundation',   // macOS AVFoundation input
+        '-i', deviceSpecifier,   // Input device
+        '-ar', '16000',          // Sample rate 16kHz (Deepgram expects this)
+        '-ac', '1',              // Mono channel
+        '-acodec', 'pcm_s16le',  // 16-bit signed little-endian PCM
+        '-f', 's16le',           // Raw PCM format for streaming
         '-'                      // Output to stdout
       ])
-    } catch (e) {
-      log.error('sox failed, trying ffmpeg...')
       
-      // Try ffmpeg with AVFoundation
-      try {
-        // Find the device index for the selected device
-        const deviceIndex = ':' + (deviceId === 'MacBook Pro Microphone' ? '1' : '0')
-        
-        this.audioProcess = spawn('ffmpeg', [
-          '-f', 'avfoundation',   // macOS AVFoundation input
-          '-i', deviceIndex,      // Input device index
-          '-ar', '16000',         // Sample rate 16kHz
-          '-ac', '1',             // Mono
-          '-acodec', 'pcm_s16le', // 16-bit signed little-endian PCM
-          '-f', 's16le',          // Raw PCM format
-          '-'                      // Output to stdout
-        ])
-      } catch (e2) {
-        log.error('ffmpeg failed:', e2)
-        this.isRecording = false
-        throw new Error('No audio recording tool available. Please install sox or ffmpeg')
-      }
+      log.info('ffmpeg process started with 16kHz mono output')
+    } catch (e) {
+      log.error('Failed to start ffmpeg:', e)
+      this.isRecording = false
+      throw new Error('Failed to start audio recording. Please install ffmpeg: brew install ffmpeg')
     }
 
     let audioBuffer = Buffer.alloc(0)
@@ -185,9 +181,9 @@ class AudioManager {
 
     this.audioProcess.stderr.on('data', (data) => {
       const msg = data.toString()
-      // Only log the first few lines of sox output
-      if (msg.includes('Input File') || msg.includes('Channels') || msg.includes('Sample Rate')) {
-        log.info('[sox init]:', msg.split('\n').slice(0, 3).join(' | '))
+      // Log ffmpeg initialization (once)
+      if (msg.includes('Stream') || msg.includes('Duration')) {
+        log.info('[ffmpeg init]:', msg.substring(0, 150))
       }
     })
 
