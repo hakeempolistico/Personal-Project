@@ -77,7 +77,13 @@ app.post('/api/summarize', async (req, res) => {
   try {
     const { transcript, speakerName, model } = req.body;
 
+    console.log('[Ollama] ===== SUMMARIZE REQUEST =====');
+    console.log('[Ollama] Speaker:', speakerName);
+    console.log('[Ollama] Transcript:', transcript);
+    console.log('[Ollama] Model:', model || DEFAULT_MODEL);
+
     if (!transcript || transcript.trim().length < 10) {
+      console.log('[Ollama] Transcript too short, skipping');
       return res.json({ summary: null, error: 'Transcript too short' });
     }
 
@@ -93,6 +99,8 @@ Provide a concise summary with:
 
 Keep it to 3-5 bullet points. Be concise and capture the essence.`;
 
+    console.log('[Ollama] Sending request to Ollama...');
+
     const response = await fetch(`${OLLAMA_URL}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -107,14 +115,21 @@ Keep it to 3-5 bullet points. Be concise and capture the essence.`;
       })
     });
 
+    console.log('[Ollama] Response status:', response.status);
+
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[Ollama] Error response:', errorText);
       throw new Error(`Ollama responded with ${response.status}`);
     }
 
     const data = await response.json();
+    console.log('[Ollama] Summary received:', data.response?.trim());
+    console.log('[Ollama] ===== SUMMARIZE COMPLETE =====');
+
     res.json({ summary: data.response?.trim() });
   } catch (error) {
-    console.error('Summarize error:', error);
+    console.error('[Ollama] Summarize error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -224,10 +239,15 @@ wss.on('connection', (ws) => {
       try {
         const data = JSON.parse(event.data);
         
+        // Log all Deepgram responses for debugging
+        console.log('[Deepgram] Raw response:', JSON.stringify(data).substring(0, 200));
+        
         if (data.channel?.alternatives?.[0]?.transcript) {
           const transcript = data.channel.alternatives[0].transcript;
           const isFinal = data.is_final;
           const confidence = data.channel.alternatives[0].confidence;
+          
+          console.log(`[Deepgram] ${isFinal ? 'FINAL' : 'INTERIM'}: "${transcript}" (confidence: ${confidence})`);
           
           ws.send(JSON.stringify({
             type: 'transcript',
@@ -237,7 +257,7 @@ wss.on('connection', (ws) => {
           }));
         }
       } catch (e) {
-        console.error('Error parsing Deepgram message:', e);
+        console.error('[Deepgram] Error parsing message:', e);
       }
     };
 
@@ -247,8 +267,8 @@ wss.on('connection', (ws) => {
     };
 
     deepgramSocket.onerror = (error) => {
-      console.error('Deepgram error:', error);
-      ws.send(JSON.stringify({ type: 'error', error: error.message }));
+      console.error('[Deepgram] Error:', error);
+      ws.send(JSON.stringify({ type: 'error', error: error.message || 'Unknown error' }));
     };
   };
 
