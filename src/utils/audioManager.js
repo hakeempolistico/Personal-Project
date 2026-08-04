@@ -108,11 +108,18 @@ class AudioManager {
         if (!this.isRecording) return;
         
         const inputData = event.inputBuffer.getChannelData(0);
+        const inputSampleRate = event.inputBuffer.sampleRate;
         
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          const pcmData = new Int16Array(inputData.length);
-          for (let i = 0; i < inputData.length; i++) {
-            const s = Math.max(-1, Math.min(1, inputData[i]));
+          // Downsample to 16000Hz for Deepgram
+          const targetSampleRate = 16000;
+          const ratio = inputSampleRate / targetSampleRate;
+          const outputLength = Math.floor(inputData.length / ratio);
+          
+          const pcmData = new Int16Array(outputLength);
+          for (let i = 0; i < outputLength; i++) {
+            const srcIndex = Math.floor(i * ratio);
+            const s = Math.max(-1, Math.min(1, inputData[srcIndex]));
             pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
           }
           this.ws.send(pcmData.buffer);
