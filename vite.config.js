@@ -26,7 +26,13 @@ module.exports = defineConfig(({ command, mode }) => ({
         },
         vite: {
           build: {
-            outDir: 'dist-electron/preload'
+            outDir: 'dist-electron/preload',
+            rollupOptions: {
+              external: ['electron'],
+              output: {
+                entryFileNames: 'preload.cjs'
+              }
+            }
           }
         }
       }
