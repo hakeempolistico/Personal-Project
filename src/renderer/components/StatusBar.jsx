@@ -53,6 +53,18 @@ function StatusBar({ isRecording, audioLevel, duration, ollamaAvailable }) {
         </div>
       )}
 
+      {/* Listening Indicator */}
+      {isRecording && (
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <span className="listening-dot w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
+            <span className="listening-dot w-2 h-2 bg-blue-400 rounded-full animate-pulse delay-100" />
+            <span className="listening-dot w-2 h-2 bg-blue-400 rounded-full animate-pulse delay-200" />
+          </div>
+          <span className="text-sm text-blue-400 font-medium">Listening...</span>
+        </div>
+      )}
+
       {/* Duration */}
       {isRecording && (
         <div className="font-mono text-lg text-gray-300">
