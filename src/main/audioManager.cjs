@@ -157,19 +157,20 @@ class AudioManager {
     let chunkCount = 0
 
     this.audioProcess.stdout.on('data', (chunk) => {
+      log.info(`[Audio] Received ${chunk.length} bytes from sox`)
       audioBuffer = Buffer.concat([audioBuffer, chunk])
       
       // Calculate chunk size (0.5 seconds at 16kHz mono 16-bit = 16000 * 0.5 * 2 = 16000 bytes)
       const chunkSize = this.sampleRate * (this.chunkDuration / 1000) * 2
+      
+      log.info(`[Audio] Buffer size: ${audioBuffer.length}, chunk size needed: ${chunkSize}`)
       
       while (audioBuffer.length >= chunkSize) {
         const audioChunk = audioBuffer.slice(0, chunkSize)
         audioBuffer = audioBuffer.slice(chunkSize)
         
         chunkCount++
-        if (chunkCount % 20 === 0) {
-          log.info(`[Audio] Sending chunk #${chunkCount}, size: ${audioChunk.length} bytes`)
-        }
+        log.info(`[Audio] Sending chunk #${chunkCount}, size: ${audioChunk.length} bytes`)
         
         if (this.chunkCallback) {
           this.chunkCallback(audioChunk)
@@ -179,10 +180,7 @@ class AudioManager {
 
     this.audioProcess.stderr.on('data', (data) => {
       const msg = data.toString()
-      // Log ffmpeg/sox progress but not spam
-      if (!msg.includes('%') && !msg.includes('=')) {
-        log.debug('Audio process stderr:', msg)
-      }
+      log.info('[sox stderr]:', msg)
     })
 
     this.audioProcess.on('error', (error) => {
