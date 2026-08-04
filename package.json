@@ -9,7 +9,7 @@
     "dev": "vite",
     "build": "vite build && electron-builder",
     "preview": "vite preview",
-    "electron:dev": "vite build && electron ."
+    "electron:dev": "vite --mode electron"
   },
   "dependencies": {
     "electron-log": "^5.1.7",

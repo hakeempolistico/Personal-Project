@@ -4,7 +4,7 @@ const electronPlugin = require('vite-plugin-electron').default
 const rendererPlugin = require('vite-plugin-electron-renderer').default
 const path = require('path')
 
-module.exports = defineConfig({
+module.exports = defineConfig(({ command, mode }) => ({
   plugins: [
     react(),
     electronPlugin([
@@ -42,4 +42,4 @@ module.exports = defineConfig({
       '@': path.resolve(__dirname, './src/renderer')
     }
   }
-})
+}))
