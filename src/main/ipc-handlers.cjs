@@ -1,17 +1,22 @@
 const log = require('electron-log')
 const { AudioManager } = require('./audioManager.cjs')
-const { Transcriber } = require('./transcriber.cjs')
 const { Summarizer } = require('./summarizer.cjs')
 
 const audioManager = new AudioManager()
-const transcriber = new Transcriber()
 const summarizer = new Summarizer()
+
+// Deepgram streaming
+const { WebSocket } = require('ws')
+let deepgramSocket = null
+let deepgramApiKey = null // Set this to your Deepgram API key
 
 let currentWindow = null
 let speakerCounter = 0
 let lastSpeakerTime = Date.now()
 let currentSpeaker = 'Speaker 1'
 let silenceThreshold = 10000 // 10 seconds of silence = new speaker
+let lastTranscriptTime = Date.now()
+let transcriptBuffer = ''
 
 function setupIpcHandlers(ipcMain, mainWindow) {
   currentWindow = mainWindow
@@ -27,13 +32,20 @@ function setupIpcHandlers(ipcMain, mainWindow) {
     }
   })
 
-  // Start recording
+  // Start recording with Deepgram streaming
   ipcMain.handle('start-recording', async (event, deviceId) => {
     try {
       log.info('Starting recording with device:', deviceId)
       speakerCounter = 0
       currentSpeaker = 'Speaker 1'
       lastSpeakerTime = Date.now()
+      lastTranscriptTime = Date.now()
+      transcriptBuffer = ''
+
+      // Connect to Deepgram
+      if (!deepgramSocket || deepgramSocket.readyState !== WebSocket.OPEN) {
+        await connectToDeepgram()
+      }
 
       await audioManager.startRecording(deviceId, async (audioChunk) => {
         // Send audio level for visualization
@@ -42,42 +54,9 @@ function setupIpcHandlers(ipcMain, mainWindow) {
           currentWindow.webContents.send('audio-level', Math.min(level / 50, 1))
         }
 
-        // Check if we should switch speakers (silence detection)
-        const now = Date.now()
-        if (now - lastSpeakerTime > silenceThreshold) {
-          speakerCounter++
-          currentSpeaker = `Speaker ${speakerCounter + 1}`
-          lastSpeakerTime = now
-        }
-
-        // Transcribe the audio chunk
-        const text = await transcriber.transcribe(audioChunk)
-        
-        if (text && text.trim()) {
-          lastSpeakerTime = Date.now()
-          
-          const transcriptEntry = {
-            id: Date.now().toString(),
-            speaker: currentSpeaker,
-            text: text.trim(),
-            timestamp: new Date().toISOString()
-          }
-
-          // Send transcript to renderer
-          if (currentWindow && !currentWindow.isDestroyed()) {
-            currentWindow.webContents.send('transcript-update', transcriptEntry)
-
-            // Generate summary for this segment (debounced)
-            setTimeout(async () => {
-              const summary = await summarizer.summarize(text, currentSpeaker)
-              if (summary && currentWindow && !currentWindow.isDestroyed()) {
-                currentWindow.webContents.send('summary-update', {
-                  speaker: currentSpeaker,
-                  summary
-                })
-              }
-            }, 2000)
-          }
+        // Send audio to Deepgram
+        if (deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN) {
+          deepgramSocket.send(audioChunk)
         }
       })
 
@@ -93,7 +72,12 @@ function setupIpcHandlers(ipcMain, mainWindow) {
     try {
       audioManager.stopRecording()
       
-      // Generate full meeting summary
+      // Close Deepgram connection
+      if (deepgramSocket) {
+        deepgramSocket.close()
+        deepgramSocket = null
+      }
+
       setTimeout(async () => {
         if (currentWindow && !currentWindow.isDestroyed()) {
           currentWindow.webContents.send('recording-stopped')
@@ -167,7 +151,109 @@ function setupIpcHandlers(ipcMain, mainWindow) {
     }
   })
 
+  // Set Deepgram API key
+  ipcMain.handle('set-deepgram-key', async (event, apiKey) => {
+    deepgramApiKey = apiKey
+    log.info('Deepgram API key set')
+    return { success: true }
+  })
+
   log.info('IPC handlers setup complete')
+}
+
+function connectToDeepgram() {
+  return new Promise((resolve, reject) => {
+    if (!deepgramApiKey) {
+      log.warn('No Deepgram API key set. Set it with window.electronAPI.setDeepgramKey("your-key")')
+      reject(new Error('No Deepgram API key'))
+      return
+    }
+
+    const url = `wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=16000&channels=1&punctuate=true`
+    
+    deepgramSocket = new WebSocket(url, {
+      headers: {
+        'Authorization': `Token ${deepgramApiKey}`
+      }
+    })
+
+    deepgramSocket.on('open', () => {
+      log.info('Deepgram WebSocket connected')
+      resolve()
+    })
+
+    deepgramSocket.on('message', (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        
+        // Log all Deepgram responses for debugging
+        log.info('[Deepgram] Raw response:', JSON.stringify(data).substring(0, 200))
+        
+        if (data.channel?.alternatives?.[0]?.transcript) {
+          const transcript = data.channel.alternatives[0].transcript
+          const isFinal = data.is_final
+          const confidence = data.channel.alternatives[0].confidence
+          
+          log.info(`[Deepgram] ${isFinal ? 'FINAL' : 'INTERIM'}: "${transcript}" (confidence: ${confidence})`)
+          
+          if (transcript && transcript.trim()) {
+            transcriptBuffer += transcript + ' '
+            
+            // Send interim transcript to UI
+            if (!isFinal && currentWindow && !currentWindow.isDestroyed()) {
+              currentWindow.webContents.send('transcript-interim', transcript.trim())
+            }
+            
+            // On final transcript, send to UI
+            if (isFinal && transcript.trim()) {
+              lastSpeakerTime = Date.now()
+              
+              const transcriptEntry = {
+                id: Date.now().toString(),
+                speaker: currentSpeaker,
+                text: transcript.trim(),
+                timestamp: new Date().toISOString()
+              }
+              
+              if (currentWindow && !currentWindow.isDestroyed()) {
+                currentWindow.webContents.send('transcript-update', transcriptEntry)
+                
+                // Generate summary
+                setTimeout(async () => {
+                  const summary = await summarizer.summarize(transcript.trim(), currentSpeaker)
+                  if (summary && currentWindow && !currentWindow.isDestroyed()) {
+                    currentWindow.webContents.send('summary-update', {
+                      speaker: currentSpeaker,
+                      summary
+                    })
+                  }
+                }, 2000)
+              }
+            }
+          }
+          
+          // Check for speaker change (silence)
+          const now = Date.now()
+          if (now - lastSpeakerTime > silenceThreshold && transcriptBuffer.trim()) {
+            speakerCounter++
+            currentSpeaker = `Speaker ${speakerCounter + 1}`
+            transcriptBuffer = ''
+            lastSpeakerTime = now
+          }
+        }
+      } catch (e) {
+        log.error('[Deepgram] Error parsing message:', e)
+      }
+    })
+
+    deepgramSocket.on('error', (error) => {
+      log.error('[Deepgram] Error:', error)
+    })
+
+    deepgramSocket.on('close', () => {
+      log.info('Deepgram WebSocket closed')
+    })
+  })
 }
 
 module.exports = { setupIpcHandlers }

@@ -8,7 +8,7 @@ class AudioManager {
     this.chunkCallback = null
     this.buffer = []
     this.sampleRate = 16000
-    this.chunkDuration = 5000 // 5 seconds
+    this.chunkDuration = 500 // 0.5 seconds - send chunks frequently
   }
 
   async listDevices() {
@@ -120,10 +120,9 @@ class AudioManager {
     
     log.info(`Starting recording from device: ${deviceId}`)
 
-    // Use sox to record audio if available, otherwise use rec from sox
-    // Fallback to ffmpeg or sox for audio capture
+    // Use ffmpeg to record audio from the specified device
+    // First, try using sox with the device
     try {
-      // First try sox
       this.audioProcess = spawn('sox', [
         '-d',                    // Use default audio device
         '-t', 'raw',             // Output raw audio
@@ -134,32 +133,43 @@ class AudioManager {
         '-'                      // Output to stdout
       ])
     } catch (e) {
-      // Fallback: try rec from sox
+      log.error('sox failed, trying ffmpeg...')
+      
+      // Try ffmpeg
       try {
-        this.audioProcess = spawn('rec', [
-          '-c', '1',
-          '-r', '16000',
-          '-t', 'wav',
-          '-'
+        this.audioProcess = spawn('ffmpeg', [
+          '-f', 'avfoundation',   // macOS AVFoundation input
+          '-i', deviceId === 'BlackHole2ch' ? 'BlackHole 2ch' : deviceId,  // Input device
+          '-ar', '16000',         // Sample rate
+          '-ac', '1',             // Mono
+          '-acodec', 'pcm_s16le', // 16-bit signed little-endian PCM
+          '-f', 's16le',          // Raw PCM format
+          '-'                      // Output to stdout
         ])
       } catch (e2) {
-        log.error('No audio recording tool available. Please install sox: brew install sox')
+        log.error('ffmpeg failed:', e2)
         this.isRecording = false
-        throw new Error('Audio recording tool not found. Please run: brew install sox')
+        throw new Error('No audio recording tool available. Please install sox or ffmpeg')
       }
     }
 
     let audioBuffer = Buffer.alloc(0)
+    let chunkCount = 0
 
     this.audioProcess.stdout.on('data', (chunk) => {
       audioBuffer = Buffer.concat([audioBuffer, chunk])
       
-      // Calculate chunk size (5 seconds at 16kHz mono 16-bit = 16000 * 5 * 2 = 160000 bytes)
+      // Calculate chunk size (0.5 seconds at 16kHz mono 16-bit = 16000 * 0.5 * 2 = 16000 bytes)
       const chunkSize = this.sampleRate * (this.chunkDuration / 1000) * 2
       
       while (audioBuffer.length >= chunkSize) {
         const audioChunk = audioBuffer.slice(0, chunkSize)
         audioBuffer = audioBuffer.slice(chunkSize)
+        
+        chunkCount++
+        if (chunkCount % 20 === 0) {
+          log.info(`[Audio] Sending chunk #${chunkCount}, size: ${audioChunk.length} bytes`)
+        }
         
         if (this.chunkCallback) {
           this.chunkCallback(audioChunk)
@@ -168,7 +178,11 @@ class AudioManager {
     })
 
     this.audioProcess.stderr.on('data', (data) => {
-      log.debug('Audio process stderr:', data.toString())
+      const msg = data.toString()
+      // Log ffmpeg/sox progress but not spam
+      if (!msg.includes('%') && !msg.includes('=')) {
+        log.debug('Audio process stderr:', msg)
+      }
     })
 
     this.audioProcess.on('error', (error) => {

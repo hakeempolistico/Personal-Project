@@ -23,6 +23,20 @@ function App() {
   useEffect(() => {
     loadDevices()
     checkOllama()
+    
+    // Set Deepgram API key (use environment variable or prompt user)
+    const deepgramKey = localStorage.getItem('deepgramKey')
+    if (deepgramKey) {
+      window.electronAPI?.setDeepgramKey(deepgramKey)
+    } else {
+      // For demo, use a placeholder - user should set their own key
+      // Get free key at https://console.deepgram.com/
+      const demoKey = prompt('Enter your Deepgram API key (get free key at https://console.deepgram.com/):')
+      if (demoKey) {
+        localStorage.setItem('deepgramKey', demoKey)
+        window.electronAPI?.setDeepgramKey(demoKey)
+      }
+    }
   }, [])
 
   // Setup electron event listeners
@@ -30,6 +44,11 @@ function App() {
     if (window.electronAPI) {
       window.electronAPI.onTranscriptUpdate((entry) => {
         setTranscripts(prev => [...prev, entry])
+      })
+
+      window.electronAPI.onTranscriptInterim((text) => {
+        // Show interim transcript (not yet finalized)
+        // You can display this in a different style if desired
       })
 
       window.electronAPI.onSummaryUpdate((data) => {

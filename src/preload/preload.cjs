@@ -13,12 +13,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkOllama: () => ipcRenderer.invoke('check-ollama'),
   getMeetingSummary: (transcripts) => ipcRenderer.invoke('get-meeting-summary', transcripts),
   
+  // Deepgram
+  setDeepgramKey: (apiKey) => ipcRenderer.invoke('set-deepgram-key', apiKey),
+  
   // Export
   exportTranscript: (data) => ipcRenderer.invoke('export-transcript', data),
   
   // Event listeners
   onTranscriptUpdate: (callback) => {
     ipcRenderer.on('transcript-update', (event, data) => callback(data))
+  },
+  
+  onTranscriptInterim: (callback) => {
+    ipcRenderer.on('transcript-interim', (event, data) => callback(data))
   },
   
   onSummaryUpdate: (callback) => {
