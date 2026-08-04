@@ -196,7 +196,8 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    const deepgramUrl = 'wss://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&punctuate=true&interim_results=true';
+    // PCM 16-bit, 16kHz, mono - matches browser AudioContext default
+    const deepgramUrl = 'wss://api.deepgram.com/v1/listen?model=nova-2&encoding=linear16&sample_rate=16000&channels=1&smart_format=true&punctuate=true&interim_results=true';
     
     // Use native WebSocket for Deepgram connection
     deepgramSocket = new globalThis.WebSocket(deepgramUrl, {
@@ -208,6 +209,15 @@ wss.on('connection', (ws) => {
     deepgramSocket.onopen = () => {
       console.log('Connected to Deepgram');
       ws.send(JSON.stringify({ type: 'connected' }));
+      
+      // Keepalive ping every 20 seconds
+      const pingInterval = setInterval(() => {
+        if (deepgramSocket && deepgramSocket.readyState === 1) {
+          deepgramSocket.send('');  // Send empty frame to keepalive
+        } else {
+          clearInterval(pingInterval);
+        }
+      }, 20000);
     };
 
     deepgramSocket.onmessage = (event) => {
@@ -244,16 +254,34 @@ wss.on('connection', (ws) => {
 
   connectToDeepgram();
 
+  let audioChunkCount = 0;
+
   ws.on('message', (message) => {
+    // Check if message is binary (raw audio)
+    if (Buffer.isBuffer(message) || message instanceof ArrayBuffer) {
+      audioChunkCount++;
+      if (audioChunkCount % 100 === 0) {
+        console.log(`Audio chunks sent: ${audioChunkCount}`);
+      }
+      // Send raw audio to Deepgram
+      if (deepgramSocket && deepgramSocket.readyState === 1) {
+        deepgramSocket.send(message);
+      }
+      return;
+    }
+
+    // Try to parse as JSON
     try {
       const data = JSON.parse(message.toString());
       
       if (data.type === 'audio') {
+        // JSON encoded audio data
         if (deepgramSocket && deepgramSocket.readyState === 1) {
           deepgramSocket.send(message);
         }
       } else if (data.type === 'start') {
         console.log('Transcription started');
+        audioChunkCount = 0;
         ws.send(JSON.stringify({ type: 'status', status: 'transcribing' }));
       } else if (data.type === 'stop') {
         console.log('Transcription stopped');
@@ -262,9 +290,8 @@ wss.on('connection', (ws) => {
         }
       }
     } catch (e) {
-      if (deepgramSocket && deepgramSocket.readyState === 1) {
-        deepgramSocket.send(message);
-      }
+      // Not JSON and not binary - ignore
+      console.error('Unknown message type:', e.message);
     }
   });
 
