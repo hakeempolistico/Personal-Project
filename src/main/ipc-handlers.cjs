@@ -184,24 +184,24 @@ function connectToDeepgram() {
 
     deepgramSocket.on('message', (event) => {
       try {
+        log.info('[Deepgram] Received message, type:', typeof event.data, 'isBuffer:', Buffer.isBuffer(event.data))
+        
         // Handle both string and binary messages
         let data
         if (typeof event.data === 'string') {
+          log.info('[Deepgram] String message:', event.data.substring(0, 100))
           data = JSON.parse(event.data)
-        } else if (event.data instanceof Buffer || event.data instanceof ArrayBuffer) {
-          const buf = Buffer.isBuffer(event.data) ? event.data : Buffer.from(event.data)
-          log.debug('[Deepgram] Binary data length:', buf.length, 'first bytes:', buf.slice(0, 20).toString('hex'))
-          
-          // Try to parse as JSON
-          try {
-            const text = buf.toString('utf8')
-            data = JSON.parse(text)
-          } catch {
-            log.debug('[Deepgram] Binary data is not JSON, skipping')
-            return
-          }
+        } else if (Buffer.isBuffer(event.data)) {
+          const text = event.data.toString('utf8')
+          log.info('[Deepgram] Buffer message, length:', event.data.length, 'preview:', text.substring(0, 100))
+          data = JSON.parse(text)
+        } else if (event.data instanceof ArrayBuffer) {
+          const text = Buffer.from(event.data).toString('utf8')
+          log.info('[Deepgram] ArrayBuffer message:', text.substring(0, 100))
+          data = JSON.parse(text)
         } else {
-          log.debug('[Deepgram] Unknown message type:', typeof event.data)
+          log.warn('[Deepgram] Unknown message type:', typeof event.data, 'constructor:', event.data?.constructor?.name)
+          log.warn('[Deepgram] Raw event:', JSON.stringify(event).substring(0, 200))
           return
         }
         
