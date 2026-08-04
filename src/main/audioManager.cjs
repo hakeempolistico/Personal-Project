@@ -13,102 +13,152 @@ class AudioManager {
 
   async listDevices() {
     return new Promise((resolve, reject) => {
-      // Try system_profiler first
-      const proc = spawn('system_profiler', ['SPAudioDataType', '-json'])
+      // Get devices from ffmpeg first to get proper device indices
+      const ffmpegProc = spawn('ffmpeg', ['-list_devices', 'true', '-f', 'avfoundation', '-i', 'dummy'])
       let stdout = ''
       let stderr = ''
 
-      proc.stdout.on('data', (data) => {
+      ffmpegProc.stdout.on('data', (data) => {
         stdout += data.toString()
       })
 
-      proc.stderr.on('data', (data) => {
+      ffmpegProc.stderr.on('data', (data) => {
         stderr += data.toString()
       })
 
-      proc.on('close', (code) => {
-        log.info('system_profiler output length:', stdout.length)
+      ffmpegProc.on('close', (code) => {
+        // Parse ffmpeg device list to get indices
+        const deviceMap = new Map()
+        const lines = stderr.split('\n')
         
-        try {
-          const data = JSON.parse(stdout)
-          log.info('Parsed system_profiler data:', JSON.stringify(data).substring(0, 500))
-          
-          const devices = []
-          
-          // Try different possible structures
-          const audioData = data.SPAudioData || data['SPAudioData-Type'] || data
-          
-          // Check for _items array
-          if (audioData._items) {
-            for (const item of audioData._items) {
-              const name = item._name || item.name || 'Unknown'
-              const uid = item['coreaudio-device_uid'] || item.id || name
-              const caps = item['coreaudio-device_capabilities'] || item.capabilities || []
-              
-              // Check if it's an input device
-              if (caps.includes('coreaudio-device-capability-input') || 
-                  caps.includes('input') || 
-                  item.coreaudio-device_inouts?.includes('input')) {
-                devices.push({
-                  id: uid,
-                  name: name,
-                  isInput: true,
-                  isBlackHole: name.toLowerCase().includes('blackhole')
-                })
-              }
+        for (const line of lines) {
+          // Match lines like "[AVFoundation input device @ 0x...] \"MacBook Pro Microphone\""
+          const match = line.match(/\[AVFoundation input device @ [^\]]+\] \"([^\"]+)\"/)
+          if (match) {
+            const deviceName = match[1]
+            // Find the index from the next line or pattern
+            const indexMatch = line.match(/\[(\d+)\]/)
+            if (indexMatch) {
+              deviceMap.set(deviceName, indexMatch[1])
             }
           }
-          
-          // Also try to find devices in any _items anywhere in the structure
-          if (devices.length === 0) {
-            const findItems = (obj) => {
+        }
+        
+        // Also parse lines like "[0] MacBook Pro Microphone"
+        for (const line of lines) {
+          const indexedMatch = line.match(/\[(\d+)\]\s+(.+?)(?:\s*\[|$)/)
+          if (indexedMatch) {
+            const index = indexedMatch[1]
+            const name = indexedMatch[2].trim()
+            if (!deviceMap.has(name)) {
+              deviceMap.set(name, index)
+            }
+          }
+        }
+        
+        log.info('FFmpeg device map:', Object.fromEntries(deviceMap))
+        
+        // Now use system_profiler for more details
+        const proc = spawn('system_profiler', ['SPAudioDataType', '-json'])
+        let spStdout = ''
+        let spStderr = ''
+
+        proc.stdout.on('data', (data) => {
+          spStdout += data.toString()
+        })
+
+        proc.stderr.on('data', (data) => {
+          spStderr += data.toString()
+        })
+
+        proc.on('close', (spCode) => {
+          try {
+            const data = JSON.parse(spStdout)
+            const devices = []
+            
+            // Find audio items in system_profiler data
+            const findAudioItems = (obj) => {
               if (!obj || typeof obj !== 'object') return
               if (Array.isArray(obj._items)) {
                 for (const item of obj._items) {
                   const name = item._name || item.name || ''
-                  if (name) {
-                    devices.push({
-                      id: item['coreaudio-device_uid'] || name,
-                      name: name,
-                      isInput: true,
-                      isBlackHole: name.toLowerCase().includes('blackhole')
-                    })
+                  if (name && name !== 'Core Audio') {
+                    const uid = item['coreaudio-device_uid'] || name
+                    const hasInput = item['coreaudio-device_input'] !== undefined || 
+                                   item.coreaudio_device_input !== undefined
+                    
+                    // Try to find ffmpeg index
+                    let ffmpegIndex = deviceMap.get(name)
+                    if (!ffmpegIndex) {
+                      // Try partial match
+                      for (const [key, value] of deviceMap) {
+                        if (key.includes(name) || name.includes(key)) {
+                          ffmpegIndex = value
+                          break
+                        }
+                      }
+                    }
+                    
+                    if (hasInput || !ffmpegIndex) {
+                      devices.push({
+                        id: uid,
+                        name: name,
+                        ffmpegIndex: ffmpegIndex || null,
+                        isInput: true,
+                        isBlackHole: name.toLowerCase().includes('blackhole')
+                      })
+                    }
                   }
                 }
               }
               for (const key of Object.keys(obj)) {
                 if (key !== '_items') {
-                  findItems(obj[key])
+                  findAudioItems(obj[key])
                 }
               }
             }
-            findItems(data)
+            
+            findAudioItems(data)
+            
+            // If we found ffmpeg indices, add them to devices from system_profiler
+            // If no devices found, create from ffmpeg map
+            if (devices.length === 0 && deviceMap.size > 0) {
+              for (const [name, index] of deviceMap) {
+                devices.push({
+                  id: name,
+                  name: name,
+                  ffmpegIndex: index,
+                  isInput: true,
+                  isBlackHole: name.toLowerCase().includes('blackhole')
+                })
+              }
+            }
+            
+            // Fallback if nothing found
+            if (devices.length === 0) {
+              log.warn('No devices found, using defaults')
+              devices.push(
+                { id: 'BlackHole 2ch', name: 'BlackHole 2ch', ffmpegIndex: '0', isInput: true, isBlackHole: true },
+                { id: 'MacBook Pro Microphone', name: 'MacBook Pro Microphone', ffmpegIndex: '1', isInput: true, isBlackHole: false }
+              )
+            }
+            
+            log.info('Found audio devices:', devices)
+            resolve(devices)
+          } catch (e) {
+            log.error('Error parsing audio devices:', e)
+            // Fallback
+            resolve([
+              { id: 'BlackHole 2ch', name: 'BlackHole 2ch', ffmpegIndex: '0', isInput: true, isBlackHole: true },
+              { id: 'MacBook Pro Microphone', name: 'MacBook Pro Microphone', ffmpegIndex: '1', isInput: true, isBlackHole: false }
+            ])
           }
-          
-          // If still no devices, use common Mac device names
-          if (devices.length === 0) {
-            log.warn('No devices found in system_profiler, using defaults')
-            devices.push(
-              { id: 'BlackHole2ch', name: 'BlackHole 2ch', isInput: true, isBlackHole: true },
-              { id: 'BuiltInMicrophone', name: 'MacBook Pro Microphone', isInput: true, isBlackHole: false }
-            )
-          }
-          
-          log.info('Found audio devices:', devices)
-          resolve(devices)
-        } catch (e) {
-          log.error('Error parsing audio devices:', e, 'Raw output:', stdout.substring(0, 200))
-          // Fallback to common BlackHole names
-          resolve([
-            { id: 'BlackHole2ch', name: 'BlackHole 2ch', isInput: true, isBlackHole: true },
-            { id: 'BuiltInMicrophone', name: 'MacBook Pro Microphone', isInput: true, isBlackHole: false }
-          ])
-        }
+        })
       })
     })
   }
 
-  async startRecording(deviceId, onAudioChunk) {
+  async startRecording(device, onAudioChunk) {
     if (this.isRecording) {
       log.warn('Already recording')
       return
@@ -118,20 +168,29 @@ class AudioManager {
     this.isRecording = true
     this.buffer = []
     
-    log.info(`Starting recording from device: ${deviceId}`)
+    // device can be either a string (deviceId) or an object with ffmpegIndex
+    const deviceId = typeof device === 'string' ? device : device.id
+    const ffmpegIndex = typeof device === 'object' && device.ffmpegIndex ? device.ffmpegIndex : null
+    
+    log.info(`Starting recording from device: ${deviceId} (ffmpeg index: ${ffmpegIndex})`)
 
     // Use ffmpeg to record audio with proper format conversion
-    // sox on macOS doesn't reliably convert formats, so use ffmpeg instead
     try {
-      // Map device name to ffmpeg device index
-      // MacBook Pro Microphone is typically :1, others :0
-      let deviceSpecifier = ''
-      if (deviceId === 'MacBook Pro Microphone') {
-        deviceSpecifier = ':1'
-      } else if (deviceId === 'BlackHole 2ch') {
-        deviceSpecifier = ':2'  // BlackHole is usually after built-in mic
+      let deviceSpecifier
+      
+      if (ffmpegIndex) {
+        // Use the detected ffmpeg index
+        deviceSpecifier = ':' + ffmpegIndex
       } else {
-        deviceSpecifier = ':0'
+        // Fallback: guess based on device name
+        if (deviceId.toLowerCase().includes('microphone') || deviceId.toLowerCase().includes('mic')) {
+          deviceSpecifier = ':1'
+        } else if (deviceId.toLowerCase().includes('blackhole')) {
+          deviceSpecifier = ':2'
+        } else {
+          deviceSpecifier = ':0'
+        }
+        log.warn('Using fallback device index:', deviceSpecifier)
       }
       
       log.info(`Using ffmpeg with device: ${deviceSpecifier}`)

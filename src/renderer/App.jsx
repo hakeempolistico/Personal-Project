@@ -121,9 +121,9 @@ function App() {
         // Auto-select BlackHole if available
         const blackhole = result.devices.find(d => d.isBlackHole)
         if (blackhole) {
-          setSelectedDevice(blackhole.id)
+          setSelectedDevice(blackhole)
         } else if (result.devices.length > 0) {
-          setSelectedDevice(result.devices[0].id)
+          setSelectedDevice(result.devices[0])
         }
       } else {
         setError(result.error)

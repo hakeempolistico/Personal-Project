@@ -33,9 +33,13 @@ function setupIpcHandlers(ipcMain, mainWindow) {
   })
 
   // Start recording with Deepgram streaming
-  ipcMain.handle('start-recording', async (event, deviceId) => {
+  ipcMain.handle('start-recording', async (event, device) => {
     try {
-      log.info('Starting recording with device:', deviceId)
+      // device can be a string (deviceId) or object with ffmpegIndex
+      const deviceId = typeof device === 'string' ? device : device.id
+      const ffmpegIndex = typeof device === 'object' && device.ffmpegIndex ? device.ffmpegIndex : null
+      
+      log.info('Starting recording with device:', deviceId, 'ffmpegIndex:', ffmpegIndex)
       speakerCounter = 0
       currentSpeaker = 'Speaker 1'
       lastSpeakerTime = Date.now()
@@ -47,7 +51,7 @@ function setupIpcHandlers(ipcMain, mainWindow) {
         await connectToDeepgram()
       }
 
-      await audioManager.startRecording(deviceId, async (audioChunk) => {
+      await audioManager.startRecording(device, async (audioChunk) => {
         // Send audio level for visualization
         if (currentWindow && !currentWindow.isDestroyed()) {
           const level = Math.abs(audioChunk.reduce((sum, b) => sum + (b - 128), 0) / audioChunk.length)

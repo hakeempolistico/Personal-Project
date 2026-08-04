@@ -1,6 +1,21 @@
 import React from 'react'
 
 function DeviceSelector({ devices, selectedDevice, onSelect, disabled }) {
+  // Helper to check if a device is selected
+  const isSelected = (device) => {
+    if (!selectedDevice) return false
+    // selectedDevice can be object or string
+    if (typeof selectedDevice === 'object') {
+      return selectedDevice.id === device.id
+    }
+    return selectedDevice === device.id
+  }
+  
+  // Helper to get device id from selection
+  const getDeviceId = (device) => {
+    return typeof device === 'object' ? device.id : device
+  }
+
   return (
     <div className="glass rounded-2xl p-5">
       <div className="flex items-center gap-3 mb-4">
@@ -32,11 +47,11 @@ function DeviceSelector({ devices, selectedDevice, onSelect, disabled }) {
           devices.map((device) => (
             <button
               key={device.id}
-              onClick={() => onSelect(device.id)}
+              onClick={() => onSelect(device)}
               disabled={disabled}
               className={`
                 p-4 rounded-xl border-2 transition-all duration-200 text-left
-                ${selectedDevice === device.id
+                ${isSelected(device)
                   ? 'border-primary-500 bg-primary-500/10'
                   : 'border-gray-700 hover:border-gray-600 bg-gray-800/50'
                 }
@@ -61,9 +76,10 @@ function DeviceSelector({ devices, selectedDevice, onSelect, disabled }) {
                   <p className="font-medium text-sm">{device.name}</p>
                   <p className="text-xs text-gray-400">
                     {device.isBlackHole ? 'Virtual Audio (for meetings)' : 'Microphone'}
+                    {device.ffmpegIndex ? ` [${device.ffmpegIndex}]` : ''}
                   </p>
                 </div>
-                {selectedDevice === device.id && (
+                {isSelected(device) && (
                   <div className="w-6 h-6 bg-primary-500 rounded-full flex items-center justify-center">
                     <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
