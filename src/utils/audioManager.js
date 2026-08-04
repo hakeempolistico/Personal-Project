@@ -1,5 +1,4 @@
-// Web-based audio manager using browser MediaRecorder API
-// Includes Web Speech API for real-time transcription
+// Web-based audio manager using Deepgram WebSocket streaming
 
 class AudioManager {
   constructor() {
@@ -10,16 +9,15 @@ class AudioManager {
     this.onAudioChunk = null;
     this.recordingInterval = null;
     
-    // Speech recognition
-    this.recognition = null;
+    // Deepgram WebSocket
+    this.ws = null;
     this.onTranscript = null;
-    this.lastTranscriptTime = Date.now();
-    this.transcriptBuffer = '';
+    this.audioContext = null;
+    this.processor = null;
   }
 
   async listDevices() {
     try {
-      // Request permission first
       await navigator.mediaDevices.getUserMedia({ audio: true });
       
       const devices = await navigator.mediaDevices.enumerateDevices();
@@ -39,72 +37,47 @@ class AudioManager {
     }
   }
 
-  // Initialize Web Speech API
-  initSpeechRecognition(onTranscript) {
-    // Check for browser support
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
-    if (!SpeechRecognition) {
-      console.warn('Speech recognition not supported in this browser');
-      return false;
-    }
-
-    this.recognition = new SpeechRecognition();
-    this.recognition.continuous = true;
-    this.recognition.interimResults = true;
-    this.recognition.lang = 'en-US';
-    
+  connectWebSocket(onTranscript) {
     this.onTranscript = onTranscript;
+    
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/transcribe`;
+    
+    console.log('Connecting to transcription server...');
+    this.ws = new WebSocket(wsUrl);
 
-    this.recognition.onresult = (event) => {
-      let finalTranscript = '';
-      let interimTranscript = '';
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += transcript + ' ';
-        } else {
-          interimTranscript += transcript;
-        }
-      }
-
-      // Only send final transcripts to avoid duplicates
-      if (finalTranscript.trim()) {
-        console.log('Final transcript:', finalTranscript);
-        if (this.onTranscript) {
-          this.onTranscript(finalTranscript.trim());
-        }
-        this.lastTranscriptTime = Date.now();
-      }
+    this.ws.onopen = () => {
+      console.log('Connected to transcription server');
     };
 
-    this.recognition.onerror = (event) => {
-      console.error('Speech recognition error:', event.error);
-      if (event.error === 'no-speech') {
-        // Restart recognition on no-speech error
-        this.restartRecognition();
-      }
-    };
-
-    this.recognition.onend = () => {
-      // Restart if still recording
-      if (this.isRecording && this.recognition) {
-        this.restartRecognition();
-      }
-    };
-
-    return true;
-  }
-
-  restartRecognition() {
-    if (this.isRecording && this.recognition) {
+    this.ws.onmessage = (event) => {
       try {
-        this.recognition.start();
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'connected') {
+          console.log('Deepgram connected and ready');
+        } else if (data.type === 'transcript') {
+          if (data.isFinal && data.text.trim()) {
+            console.log('Final transcript:', data.text);
+            if (this.onTranscript) {
+              this.onTranscript(data.text.trim());
+            }
+          }
+        } else if (data.type === 'error') {
+          console.error('Transcription error:', data.error);
+        }
       } catch (e) {
-        console.warn('Could not restart recognition:', e);
+        console.error('Error parsing WebSocket message:', e);
       }
-    }
+    };
+
+    this.ws.onclose = () => {
+      console.log('WebSocket disconnected');
+    };
+
+    this.ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
   }
 
   async startRecording(deviceId, onAudioChunk, onTranscript) {
@@ -113,7 +86,9 @@ class AudioManager {
     }
 
     try {
-      // Get audio stream
+      this.connectWebSocket(onTranscript);
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       const constraints = {
         audio: deviceId ? { deviceId: { exact: deviceId } } : true,
         video: false
@@ -124,33 +99,34 @@ class AudioManager {
       this.audioChunks = [];
       this.isRecording = true;
 
-      // Create audio context for processing
-      const audioContext = new AudioContext();
-      const source = audioContext.createMediaStreamSource(this.mediaStream);
-      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+      this.audioContext = new AudioContext();
+      const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+      
+      this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
 
-      processor.onaudioprocess = (event) => {
+      this.processor.onaudioprocess = (event) => {
         if (!this.isRecording) return;
         
         const inputData = event.inputBuffer.getChannelData(0);
         
-        // Convert to 16-bit PCM
-        const pcmData = new Int16Array(inputData.length);
-        for (let i = 0; i < inputData.length; i++) {
-          const s = Math.max(-1, Math.min(1, inputData[i]));
-          pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          const pcmData = new Int16Array(inputData.length);
+          for (let i = 0; i < inputData.length; i++) {
+            const s = Math.max(-1, Math.min(1, inputData[i]));
+            pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+          }
+          this.ws.send(pcmData.buffer);
         }
 
-        // Send to callback
         if (this.onAudioChunk) {
-          this.onAudioChunk(new Uint8Array(pcmData.buffer));
+          const level = Math.abs(inputData.reduce((sum, b) => sum + Math.abs(b), 0) / inputData.length);
+          this.onAudioChunk(new Uint8Array(new Int16Array([Math.floor(level * 32768)]).buffer));
         }
       };
 
-      source.connect(processor);
-      processor.connect(audioContext.destination);
+      source.connect(this.processor);
+      this.processor.connect(this.audioContext.destination);
 
-      // Also record using MediaRecorder for potential playback
       this.mediaRecorder = new MediaRecorder(this.mediaStream, {
         mimeType: this.getSupportedMimeType()
       });
@@ -162,20 +138,7 @@ class AudioManager {
       };
 
       this.mediaRecorder.start(1000);
-
-      // Start speech recognition
-      if (!this.initSpeechRecognition(onTranscript)) {
-        console.log('Speech recognition not available - using manual mode');
-      } else {
-        try {
-          this.recognition.start();
-          console.log('Speech recognition started');
-        } catch (e) {
-          console.warn('Could not start speech recognition:', e);
-        }
-      }
-
-      console.log('Recording started');
+      console.log('Recording started with Deepgram streaming');
     } catch (error) {
       this.isRecording = false;
       throw error;
@@ -187,9 +150,19 @@ class AudioManager {
 
     this.isRecording = false;
 
-    if (this.recognition) {
-      this.recognition.stop();
-      this.recognition = null;
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+
+    if (this.processor) {
+      this.processor.disconnect();
+      this.processor = null;
+    }
+
+    if (this.audioContext) {
+      this.audioContext.close();
+      this.audioContext = null;
     }
 
     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {

@@ -1,6 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const { WebSocketServer } = require('ws');
+const http = require('http');
+require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,13 +13,18 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// Ollama configuration
+// Configuration
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY || '';
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    deepgramConfigured: !!DEEPGRAM_API_KEY
+  });
 });
 
 // Check Ollama availability
@@ -29,7 +37,6 @@ app.get('/api/check-ollama', async (req, res) => {
 
     const versionData = await response.json();
 
-    // Check for models
     const modelsResponse = await fetch(`${OLLAMA_URL}/api/tags`);
     if (!modelsResponse.ok) {
       return res.json({ available: false, error: 'Cannot get models' });
@@ -43,10 +50,11 @@ app.get('/api/check-ollama', async (req, res) => {
       version: versionData.version,
       model: DEFAULT_MODEL,
       hasModel,
-      availableModels: modelsData.models || []
+      availableModels: modelsData.models || [],
+      deepgramAvailable: !!DEEPGRAM_API_KEY
     });
   } catch (error) {
-    res.json({ available: false, error: error.message });
+    res.json({ available: false, error: error.message, deepgramAvailable: !!DEEPGRAM_API_KEY });
   }
 });
 
@@ -69,7 +77,7 @@ app.post('/api/summarize', async (req, res) => {
   try {
     const { transcript, speakerName, model } = req.body;
 
-    if (!transcript || transcript.trim().length < 20) {
+    if (!transcript || transcript.trim().length < 10) {
       return res.json({ summary: null, error: 'Transcript too short' });
     }
 
@@ -169,8 +177,119 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-app.listen(PORT, () => {
+// Create HTTP server for WebSocket
+const server = http.createServer(app);
+
+// WebSocket server for Deepgram streaming
+const wss = new WebSocketServer({ server, path: '/ws/transcribe' });
+
+wss.on('connection', (ws) => {
+  console.log('🎤 New transcription WebSocket connection');
+  
+  let deepgramSocket = null;
+  let isConnected = false;
+
+  // Connect to Deepgram
+  const connectToDeepgram = () => {
+    if (!DEEPGRAM_API_KEY) {
+      console.error('Deepgram API key not configured');
+      ws.send(JSON.stringify({ error: 'Deepgram not configured' }));
+      return;
+    }
+
+    const deepgramUrl = 'wss://api.deepgram.com/v1/listen?model=nova-2&smart_format=true&punctuate=true&interim_results=true';
+    
+    deepgramSocket = new WebSocket(deepgramUrl, {
+      headers: {
+        'Authorization': `Token ${DEEPGRAM_API_KEY}`
+      }
+    });
+
+    deepgramSocket.on('open', () => {
+      console.log('✅ Connected to Deepgram');
+      isConnected = true;
+      ws.send(JSON.stringify({ type: 'connected' }));
+    });
+
+    deepgramSocket.on('message', (message) => {
+      try {
+        const data = JSON.parse(message.toString());
+        
+        // Handle transcription results
+        if (data.channel?.alternatives?.[0]?.transcript) {
+          const transcript = data.channel.alternatives[0].transcript;
+          const isFinal = data.is_final;
+          const confidence = data.channel.alternatives[0].confidence;
+          
+          ws.send(JSON.stringify({
+            type: 'transcript',
+            text: transcript,
+            isFinal,
+            confidence
+          }));
+        }
+      } catch (e) {
+        console.error('Error parsing Deepgram message:', e);
+      }
+    });
+
+    deepgramSocket.on('close', () => {
+      console.log('❌ Deepgram connection closed');
+      isConnected = false;
+      ws.send(JSON.stringify({ type: 'disconnected' }));
+    });
+
+    deepgramSocket.on('error', (error) => {
+      console.error('Deepgram error:', error.message);
+      ws.send(JSON.stringify({ type: 'error', error: error.message }));
+    });
+  };
+
+  // Connect to Deepgram when client connects
+  connectToDeepgram();
+
+  // Handle messages from client (audio data)
+  ws.on('message', (message) => {
+    try {
+      const data = JSON.parse(message.toString());
+      
+      if (data.type === 'audio') {
+        // Forward audio to Deepgram
+        if (deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN) {
+          deepgramSocket.send(message);
+        }
+      } else if (data.type === 'start') {
+        console.log('▶️ Transcription started');
+        ws.send(JSON.stringify({ type: 'status', status: 'transcribing' }));
+      } else if (data.type === 'stop') {
+        console.log('⏹️ Transcription stopped');
+        if (deepgramSocket) {
+          deepgramSocket.close();
+        }
+      }
+    } catch (e) {
+      // If not JSON, assume raw audio data
+      if (deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN) {
+        deepgramSocket.send(message);
+      }
+    }
+  });
+
+  ws.on('close', () => {
+    console.log('🔌 Client disconnected');
+    if (deepgramSocket) {
+      deepgramSocket.close();
+    }
+  });
+
+  ws.on('error', (error) => {
+    console.error('WebSocket error:', error.message);
+  });
+});
+
+server.listen(PORT, () => {
   console.log(`🚀 MeetingTranscriber server running at http://localhost:${PORT}`);
   console.log(`📡 Ollama endpoint: ${OLLAMA_URL}`);
   console.log(`🤖 Default model: ${DEFAULT_MODEL}`);
+  console.log(`🎤 Deepgram: ${DEEPGRAM_API_KEY ? 'Configured' : 'Not configured'}`);
 });
