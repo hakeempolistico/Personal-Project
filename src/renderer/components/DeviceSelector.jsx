@@ -58,9 +58,9 @@ function DeviceSelector({ devices, selectedDevice, onSelect, disabled }) {
                   )}
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-sm">{device.name}</p>
+                  <p className="font-medium text-sm">{device.label}</p>
                   <p className="text-xs text-gray-400">
-                    {device.isBlackHole ? 'Virtual Audio (for meetings)' : 'Microphone'}
+                    {device.isBlackHole ? 'BlackHole Audio' : 'Microphone'}
                   </p>
                 </div>
                 {selectedDevice === device.id && (
