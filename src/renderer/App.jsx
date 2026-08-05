@@ -15,6 +15,7 @@ function App() {
   const [ollamaAvailable, setOllamaAvailable] = useState(null)
   const [meetingDuration, setMeetingDuration] = useState(0)
   const [error, setError] = useState(null)
+  const [transcriptionStatus, setTranscriptionStatus] = useState(null)
   
   const durationIntervalRef = useRef(null)
   const startTimeRef = useRef(null)
@@ -23,13 +24,6 @@ function App() {
   useEffect(() => {
     loadDevices()
     checkOllama()
-    
-    // Set Deepgram API key from localStorage
-    const deepgramKey = localStorage.getItem('deepgramKey')
-    if (deepgramKey) {
-      window.electronAPI?.setDeepgramKey(deepgramKey)
-    }
-    // User should set their Deepgram key via the ControlPanel UI
   }, [])
 
   // Setup electron event listeners
@@ -67,6 +61,16 @@ function App() {
         }
       })
 
+      // New: Transcription status updates (from Livcap)
+      window.electronAPI.onTranscriptionStatus((data) => {
+        setTranscriptionStatus(data)
+      })
+
+      // New: Transcription errors
+      window.electronAPI.onTranscriptionError((errorMessage) => {
+        setError(`Livcap error: ${errorMessage}`)
+      })
+
       window.electronAPI.onTrayStartRecording(() => {
         if (!isRecording && selectedDevice) {
           startRecording()
@@ -86,6 +90,8 @@ function App() {
         window.electronAPI.removeAllListeners('summary-update')
         window.electronAPI.removeAllListeners('audio-level')
         window.electronAPI.removeAllListeners('recording-stopped')
+        window.electronAPI.removeAllListeners('transcription-status')
+        window.electronAPI.removeAllListeners('transcription-error')
         window.electronAPI.removeAllListeners('tray-start-recording')
         window.electronAPI.removeAllListeners('tray-stop-recording')
       }
@@ -265,6 +271,7 @@ function App() {
               onClear={clearTranscript}
               onExport={exportTranscript}
               hasTranscript={transcripts.length > 0}
+              transcriptionStatus={transcriptionStatus}
             />
 
             <LiveTranscript 

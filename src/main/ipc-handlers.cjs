@@ -1,14 +1,16 @@
 const log = require('electron-log')
 const { AudioManager } = require('./audioManager.cjs')
 const { Summarizer } = require('./summarizer.cjs')
+const { LivcapServer } = require('../server/livcap-server.cjs')
 
 const audioManager = new AudioManager()
 const summarizer = new Summarizer()
+const livcapServer = new LivcapServer({ port: 8766 })
 
-// Deepgram streaming
+// Legacy Deepgram support (can be removed later)
 const { WebSocket } = require('ws')
 let deepgramSocket = null
-let deepgramApiKey = null // Set this to your Deepgram API key
+let deepgramApiKey = null
 
 let currentWindow = null
 let speakerCounter = 0
@@ -17,6 +19,9 @@ let currentSpeaker = 'Speaker 1'
 let silenceThreshold = 10000 // 10 seconds of silence = new speaker
 let lastTranscriptTime = Date.now()
 let transcriptBuffer = ''
+
+// Set to true to use Livcap (on-device), false to use Deepgram (cloud)
+const USE_LIVCAP = true
 
 function setupIpcHandlers(ipcMain, mainWindow) {
   currentWindow = mainWindow
@@ -32,39 +37,57 @@ function setupIpcHandlers(ipcMain, mainWindow) {
     }
   })
 
-  // Start recording with Deepgram streaming
+  // Start recording with Livcap (on-device) or Deepgram (cloud)
   ipcMain.handle('start-recording', async (event, device) => {
     try {
-      // device can be a string (deviceId) or object with ffmpegIndex
-      const deviceId = typeof device === 'string' ? device : device.id
-      const ffmpegIndex = typeof device === 'object' && device.ffmpegIndex ? device.ffmpegIndex : null
-      
-      log.info('Starting recording with device:', deviceId, 'ffmpegIndex:', ffmpegIndex)
-      speakerCounter = 0
-      currentSpeaker = 'Speaker 1'
-      lastSpeakerTime = Date.now()
-      lastTranscriptTime = Date.now()
-      transcriptBuffer = ''
+      if (USE_LIVCAP) {
+        // Use Livcap (on-device transcription)
+        log.info('Starting recording with Livcap (on-device)...')
+        speakerCounter = 0
+        currentSpeaker = 'Speaker 1'
+        lastSpeakerTime = Date.now()
+        lastTranscriptTime = Date.now()
+        transcriptBuffer = ''
+        
+        // Start the Livcap server if not already running
+        await livcapServer.start()
+        
+        // Connect to Livcap server WebSocket
+        await connectToLivcapServer()
+        
+        return { success: true }
+      } else {
+        // Legacy Deepgram streaming (cloud-based)
+        const deviceId = typeof device === 'string' ? device : device.id
+        const ffmpegIndex = typeof device === 'object' && device.ffmpegIndex ? device.ffmpegIndex : null
+        
+        log.info('Starting recording with Deepgram:', deviceId, 'ffmpegIndex:', ffmpegIndex)
+        speakerCounter = 0
+        currentSpeaker = 'Speaker 1'
+        lastSpeakerTime = Date.now()
+        lastTranscriptTime = Date.now()
+        transcriptBuffer = ''
 
-      // Connect to Deepgram
-      if (!deepgramSocket || deepgramSocket.readyState !== WebSocket.OPEN) {
-        await connectToDeepgram()
+        // Connect to Deepgram
+        if (!deepgramSocket || deepgramSocket.readyState !== WebSocket.OPEN) {
+          await connectToDeepgram()
+        }
+
+        await audioManager.startRecording(device, async (audioChunk) => {
+          // Send audio level for visualization
+          if (currentWindow && !currentWindow.isDestroyed()) {
+            const level = Math.abs(audioChunk.reduce((sum, b) => sum + (b - 128), 0) / audioChunk.length)
+            currentWindow.webContents.send('audio-level', Math.min(level / 50, 1))
+          }
+
+          // Send audio to Deepgram
+          if (deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN) {
+            deepgramSocket.send(audioChunk)
+          }
+        })
+
+        return { success: true }
       }
-
-      await audioManager.startRecording(device, async (audioChunk) => {
-        // Send audio level for visualization
-        if (currentWindow && !currentWindow.isDestroyed()) {
-          const level = Math.abs(audioChunk.reduce((sum, b) => sum + (b - 128), 0) / audioChunk.length)
-          currentWindow.webContents.send('audio-level', Math.min(level / 50, 1))
-        }
-
-        // Send audio to Deepgram
-        if (deepgramSocket && deepgramSocket.readyState === WebSocket.OPEN) {
-          deepgramSocket.send(audioChunk)
-        }
-      })
-
-      return { success: true }
     } catch (error) {
       log.error('Error starting recording:', error)
       return { success: false, error: error.message }
@@ -74,19 +97,29 @@ function setupIpcHandlers(ipcMain, mainWindow) {
   // Stop recording
   ipcMain.handle('stop-recording', async () => {
     try {
-      audioManager.stopRecording()
-      
-      // Close Deepgram connection
-      if (deepgramSocket) {
-        deepgramSocket.close()
-        deepgramSocket = null
-      }
-
-      setTimeout(async () => {
+      if (USE_LIVCAP) {
+        // Stop Livcap server
+        await livcapServer.stop()
+        
         if (currentWindow && !currentWindow.isDestroyed()) {
           currentWindow.webContents.send('recording-stopped')
         }
-      }, 1000)
+      } else {
+        // Legacy Deepgram streaming
+        audioManager.stopRecording()
+        
+        // Close Deepgram connection
+        if (deepgramSocket) {
+          deepgramSocket.close()
+          deepgramSocket = null
+        }
+
+        setTimeout(async () => {
+          if (currentWindow && !currentWindow.isDestroyed()) {
+            currentWindow.webContents.send('recording-stopped')
+          }
+        }, 1000)
+      }
 
       return { success: true }
     } catch (error) {
@@ -155,14 +188,122 @@ function setupIpcHandlers(ipcMain, mainWindow) {
     }
   })
 
-  // Set Deepgram API key
+  // Set Deepgram API key (for legacy Deepgram mode)
   ipcMain.handle('set-deepgram-key', async (event, apiKey) => {
     deepgramApiKey = apiKey
     log.info('Deepgram API key set')
     return { success: true }
   })
+  
+  // Get transcription status
+  ipcMain.handle('get-transcription-status', async () => {
+    if (USE_LIVCAP) {
+      return {
+        using: 'livcap',
+        status: livcapServer.getStatus()
+      }
+    } else {
+      return {
+        using: 'deepgram',
+        status: {
+          listening: audioManager.getRecordingState(),
+          transcriptCount: transcriptBuffer.length
+        }
+      }
+    }
+  })
 
   log.info('IPC handlers setup complete')
+}
+
+// Connect to Livcap server (on-device transcription)
+let livcapClientSocket = null
+
+function connectToLivcapServer() {
+  return new Promise((resolve, reject) => {
+    const wsUrl = `ws://localhost:${livcapServer.port || 8766}`
+    log.info(`[LivcapClient] Connecting to ${wsUrl}`)
+    
+    livcapClientSocket = new WebSocket(wsUrl)
+    
+    livcapClientSocket.on('open', () => {
+      log.info('[LivcapClient] Connected to Livcap server')
+      resolve()
+    })
+    
+    livcapClientSocket.on('message', (message) => {
+      try {
+        const data = JSON.parse(message)
+        
+        switch (data.type) {
+          case 'status':
+            log.info(`[LivcapClient] Status: ${data.status} - ${data.message}`)
+            if (currentWindow && !currentWindow.isDestroyed()) {
+              currentWindow.webContents.send('transcription-status', data)
+            }
+            break
+            
+          case 'partial':
+            // Real-time partial transcript (while speaking)
+            if (currentWindow && !currentWindow.isDestroyed()) {
+              currentWindow.webContents.send('transcript-interim', data.transcript)
+            }
+            break
+            
+          case 'transcript':
+            // Finalized transcript segment
+            if (currentWindow && !currentWindow.isDestroyed()) {
+              currentWindow.webContents.send('transcript-update', {
+                id: data.id,
+                speaker: data.speaker,
+                text: data.text,
+                timestamp: data.timestamp
+              })
+            }
+            break
+            
+          case 'summary':
+            // AI-generated summary
+            if (currentWindow && !currentWindow.isDestroyed()) {
+              currentWindow.webContents.send('summary-update', {
+                speaker: data.speaker,
+                summary: data.summary,
+                actionItems: data.actionItems
+              })
+            }
+            break
+            
+          case 'sync':
+            // Full transcript sync (on reconnect)
+            if (data.transcripts && currentWindow && !currentWindow.isDestroyed()) {
+              for (const t of data.transcripts) {
+                currentWindow.webContents.send('transcript-update', t)
+              }
+            }
+            break
+            
+          case 'error':
+            log.error(`[LivcapClient] Error: ${data.message}`)
+            if (currentWindow && !currentWindow.isDestroyed()) {
+              currentWindow.webContents.send('transcription-error', data.message)
+            }
+            break
+        }
+      } catch (e) {
+        log.error('[LivcapClient] Failed to parse message:', e)
+      }
+    })
+    
+    livcapClientSocket.on('close', () => {
+      log.info('[LivcapClient] Disconnected from Livcap server')
+      livcapClientSocket = null
+    })
+    
+    livcapClientSocket.on('error', (error) => {
+      log.error('[LivcapClient] WebSocket error:', error)
+      reject(error)
+    })
+  })
 }
 
 function connectToDeepgram() {

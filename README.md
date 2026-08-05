@@ -4,14 +4,15 @@ A **100% local** real-time meeting transcription and summarization app for macOS
 
 - **No internet required** for transcription/summarization
 - **No API costs** - completely free forever
+- **On-device transcription** using Apple's Speech framework
+- **Smart summarization** - only on finalized speech segments
 - **Speaker identification** with automatic diarization
-- **Auto-generated summaries** for each speaker's report
 
 ---
 
 ## 📋 Prerequisites
 
-Before installing, you need to set up two tools:
+Before installing, you need to set up tools:
 
 ### Step 1: Install Homebrew (if not already installed)
 
@@ -42,7 +43,18 @@ After installation:
 4. Name it "Meeting Audio" and check "Use This Device For Sound Output"
 5. In your meeting app, set the audio output to "Meeting Audio"
 
-### Step 3: Install Ollama (for Summarization)
+### Step 3: Build Livcap (for On-Device Transcription)
+
+Livcap uses Apple's built-in Speech framework for local transcription:
+
+```bash
+cd livcap
+./build.sh
+```
+
+This requires Xcode or Swift installed on your Mac.
+
+### Step 4: Install Ollama (for Summarization)
 
 Ollama runs AI models locally on your Mac.
 
@@ -55,13 +67,11 @@ After installation, download the Llama 3.2 model:
 ollama pull llama3.2
 ```
 
-This downloads ~2GB and may take a few minutes.
-
 ---
 
 ## 🚀 Installation
 
-### Option A: Build from Source
+### Build from Source
 
 ```bash
 # Clone or download this project
@@ -70,11 +80,16 @@ cd meeting-transcriber
 # Install dependencies
 npm install
 
+# Build Livcap (requires Swift)
+cd livcap
+./build.sh
+cd ..
+
 # Start the app in development mode
 npm run dev
 ```
 
-### Option B: Build the App (creates .app file)
+### Build the App (creates .app file)
 
 ```bash
 # Install dependencies
@@ -95,7 +110,7 @@ The built app will be in `release/` folder.
 On first launch:
 1. The app will show available audio devices
 2. Select **BlackHole 2ch** (or your configured aggregate device)
-3. Click **Connect**
+3. Click **Start Recording**
 
 ### 2. Set Up Your Meeting App
 
@@ -119,26 +134,73 @@ After the meeting:
 
 ---
 
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        Electron UI                            │
+│  ┌─────────────┐  ┌──────────────┐  ┌───────────────────┐   │
+│  │   React     │  │  Control     │  │   LiveTranscript   │   │
+│  │   App       │  │  Panel       │  │   & Summaries     │   │
+│  └─────────────┘  └──────────────┘  └───────────────────┘   │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ IPC
+┌──────────────────────────▼──────────────────────────────────┐
+│                    Electron Main Process                      │
+│  ┌──────────────────┐  ┌────────────────────────────────┐  │
+│  │  IPC Handlers    │  │   Livcap Server (WebSocket)      │  │
+│  │                  │  │   - Manages transcript buffer   │  │
+│  │                  │  │   - Connects to Ollama          │  │
+│  └──────────────────┘  └────────────────────────────────┘  │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ stdout (JSON)
+┌──────────────────────────▼──────────────────────────────────┐
+│                    Livcap (Swift)                            │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Apple Speech Framework                               │  │
+│  │  - SFSpeechRecognizer (on-device)                     │  │
+│  │  - AVAudioEngine (microphone capture)                 │  │
+│  │  - Outputs JSON to stdout                            │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                           │
+┌──────────────────────────▼──────────────────────────────────┐
+│                    Ollama (LLM)                              │
+│  - Summarizes finalized transcript segments                  │
+│  - Extracts action items and decisions                      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### How Transcription Works
+
+1. **Livcap** uses Apple's on-device Speech framework for transcription
+2. Transcripts are output as JSON to stdout
+3. **Node.js server** parses the output and maintains a transcript buffer
+4. When a speaker pauses (2+ seconds of silence), that segment is marked as "final"
+5. Only finalized segments are sent to **Ollama** for summarization
+6. This prevents unstable summaries from incomplete speech fragments
+
+---
+
 ## ⚙️ System Requirements
 
 | Requirement | Minimum | Recommended |
 |-------------|---------|--------------|
-| macOS | 12.0+ | 14.0+ |
+| macOS | 13.0+ | 14.0+ |
 | RAM | 8GB | 16GB |
 | Storage | 5GB free | 10GB free |
-| CPU | Intel/Apple Silicon | M1/M2/M3/M4 |
+| CPU | Apple Silicon | M1/M2/M3/M4 |
 
-**Note:** The app uses CPU for whisper.cpp transcription and Ollama for summarization. Your Mac may get warm during long meetings.
+**Note:** The app uses Apple's Speech framework for transcription (very efficient) and Ollama for summarization.
 
 ---
 
 ## 🔧 Troubleshooting
 
-### "BlackHole not appearing in device list"
+### "Livcap binary not found"
 
-1. Restart the app
-2. Check System Settings → Privacy & Security → Microphone → Enable for your app
-3. Verify BlackHole is installed: `brew list blackhole-2ch`
+1. Make sure Swift is installed: `swift --version`
+2. Rebuild Livcap: `cd livcap && ./build.sh`
 
 ### "Ollama connection failed"
 
@@ -146,18 +208,11 @@ After the meeting:
 2. Or manually start: `ollama serve`
 3. Verify model is installed: `ollama list`
 
-### "Transcription is slow"
-
-This is normal for local processing. To improve:
-- Close other apps
-- Use Apple Silicon Mac (faster than Intel)
-- Reduce audio chunk size (in Settings)
-
 ### "No audio detected"
 
 1. Check macOS System Settings → Privacy & Security → Microphone
-2. Ensure your meeting app outputs to BlackHole
-3. Test with QuickTime Player → File → New Audio Recording
+2. Check System Settings → Privacy & Security → Speech Recognition
+3. Ensure your meeting app outputs to BlackHole
 
 ---
 
@@ -167,16 +222,22 @@ This is normal for local processing. To improve:
 meeting-transcriber/
 ├── src/
 │   ├── main/
-│   │   ├── index.js           # Electron main process
-│   │   ├── audioManager.js     # Audio capture from BlackHole
-│   │   ├── transcriber.js      # whisper.cpp integration
-│   │   ├── summarizer.js       # Ollama integration
-│   │   └── ipc-handlers.js     # IPC communication
+│   │   ├── index.cjs           # Electron main process
+│   │   ├── audioManager.cjs     # Audio capture from BlackHole
+│   │   ├── transcriber.cjs      # whisper.cpp integration (legacy)
+│   │   ├── summarizer.cjs       # Ollama integration
+│   │   └── ipc-handlers.cjs     # IPC communication
+│   ├── server/
+│   │   └── livcap-server.js    # Livcap process manager
 │   ├── preload/
-│   │   └── preload.js          # Secure bridge
+│   │   └── preload.cjs         # Secure bridge
 │   └── renderer/
-│       ├── App.jsx            # Main React component
-│       └── components/        # UI components
+│       ├── App.jsx             # Main React component
+│       └── components/         # UI components
+├── livcap/
+│   ├── Package.swift          # Swift Package definition
+│   ├── Sources/main.swift       # Livcap transcription engine
+│   └── build.sh                # Build script
 ├── package.json
 └── README.md
 ```
@@ -189,8 +250,8 @@ meeting-transcriber/
 |-----------|------------|---------|
 | Desktop App | Electron | Cross-platform desktop framework |
 | Frontend | React + Vite | Modern reactive UI |
-| Audio Capture | BlackHole + microphone-api | Capture meeting audio |
-| Transcription | whisper.cpp | Local speech-to-text |
+| Audio Capture | BlackHole + AVAudioEngine | Capture meeting audio |
+| Transcription | Livcap + Apple Speech | On-device local speech-to-text |
 | Summarization | Ollama + Llama 3.2 | Local AI summaries |
 | Styling | Tailwind CSS | Clean, modern UI |
 
@@ -204,7 +265,7 @@ MIT License - Use freely for personal and commercial projects.
 
 ## 🙏 Acknowledgments
 
-- [whisper.cpp](https://github.com/ggerganov/whisper.cpp) - OpenAI Whisper ported to C/C++
+- [Apple Speech Framework](https://developer.apple.com/documentation/speech) - On-device speech recognition
 - [Ollama](https://ollama.ai/) - Run LLMs locally
 - [BlackHole](https://existential.audio/blackhole/) - Virtual audio driver for macOS
 - [Electron](https://www.electronjs.org/) - Desktop app framework

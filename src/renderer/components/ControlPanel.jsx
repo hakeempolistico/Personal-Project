@@ -1,52 +1,25 @@
 import React, { useState } from 'react'
 
-function ControlPanel({ isRecording, onStart, onStop, onClear, onExport, hasTranscript }) {
+function ControlPanel({ isRecording, onStart, onStop, onClear, onExport, hasTranscript, transcriptionStatus }) {
   const [showExportMenu, setShowExportMenu] = useState(false)
-  const [deepgramKey, setDeepgramKey] = useState(localStorage.getItem('deepgramKey') || '')
-  const [showKeyInput, setShowKeyInput] = useState(!localStorage.getItem('deepgramKey'))
-
-  const handleSaveDeepgramKey = () => {
-    if (deepgramKey.trim()) {
-      localStorage.setItem('deepgramKey', deepgramKey.trim())
-      window.electronAPI?.setDeepgramKey(deepgramKey.trim())
-      setShowKeyInput(false)
-    }
-  }
 
   return (
     <div className="glass rounded-2xl p-5">
-      {/* Deepgram API Key Input */}
-      {showKeyInput && (
-        <div className="mb-4 p-4 bg-yellow-900/20 border border-yellow-700/30 rounded-xl">
-          <div className="flex items-start gap-3">
-            <svg className="w-5 h-5 text-yellow-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-            </svg>
-            <div className="flex-1">
-              <p className="text-yellow-300 font-medium">Deepgram API Key Required</p>
-              <p className="text-yellow-400/70 text-sm mt-1">
-                Get a free key at <a href="https://console.deepgram.com/" target="_blank" rel="noopener noreferrer" className="underline">console.deepgram.com</a>
-              </p>
-              <div className="flex gap-2 mt-2">
-                <input
-                  type="password"
-                  value={deepgramKey}
-                  onChange={(e) => setDeepgramKey(e.target.value)}
-                  placeholder="Enter your Deepgram API key"
-                  className="flex-1 px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-sm text-white placeholder-gray-400 focus:outline-none focus:border-yellow-500"
-                />
-                <button
-                  onClick={handleSaveDeepgramKey}
-                  disabled={!deepgramKey.trim()}
-                  className="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
+      {/* Transcription Status Banner */}
+      <div className="mb-4 p-4 bg-green-900/20 border border-green-700/30 rounded-xl">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+          <div className="flex-1">
+            <p className="text-green-300 font-medium">Livcap (On-Device Transcription)</p>
+            <p className="text-green-400/70 text-sm mt-1">
+              Using Apple's Speech framework for local transcription. No cloud services required.
+              {transcriptionStatus?.listening && ` • Currently listening`}
+            </p>
           </div>
         </div>
-      )}
+      </div>
 
       <div className="flex flex-wrap items-center justify-between gap-4">
         {/* Main Controls */}
@@ -162,6 +135,7 @@ function ControlPanel({ isRecording, onStart, onStop, onClear, onExport, hasTran
               <p className="text-blue-400/70 mt-1">
                 Select your audio device and click Start Recording to begin transcribing.
                 Make sure your meeting audio is routed to BlackHole if capturing from apps.
+                Summaries are generated automatically using Ollama when speakers pause.
               </p>
             </div>
           </div>
@@ -180,6 +154,7 @@ function ControlPanel({ isRecording, onStart, onStop, onClear, onExport, hasTran
               <p className="text-red-400/70 mt-1">
                 Audio is being captured and transcribed in real-time.
                 Speakers will be automatically identified based on voice patterns.
+                Summaries update when speakers pause for 2+ seconds.
               </p>
             </div>
           </div>
