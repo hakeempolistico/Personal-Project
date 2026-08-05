@@ -142,8 +142,7 @@ class LivcapTranscriber {
     private func createPCMBuffer(from sampleBuffer: CMSampleBuffer) -> AVAudioPCMBuffer? {
         guard let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer) else { return nil }
         
-        guard let audioStreamBasicDescription = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription) else { return nil }
-        guard let asbd = audioStreamBasicDescription?.pointee else { return nil }
+        guard CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription) != nil else { return nil }
         
         let frameCount = CMSampleBufferGetNumSamples(sampleBuffer)
         guard frameCount > 0 else { return nil }
@@ -178,6 +177,20 @@ class LivcapTranscriber {
         }
         
         return pcmBuffer
+    }
+    
+    private func startMicrophoneCapture() {
+        let inputNode = audioEngine.inputNode
+        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: recordingFormat) { [weak self] buffer, _ in
+            self?.recognitionRequest?.append(buffer)
+        }
+        
+        audioEngine.prepare()
+        try audioEngine.start()
+        print("[Livcap] Fallback: Using microphone input", terminator: "\n")
+        fflush(stdout)
     }
     
     func stop() {
