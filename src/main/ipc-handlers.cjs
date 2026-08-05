@@ -29,12 +29,18 @@ class LivcapServer {
     }
     
     findLivcapBinary() {
-        const basePath = path.join(__dirname, '..')
+        // Try multiple possible locations
         const possiblePaths = [
-            path.join(basePath, '../../livcap/.build/release/livcap'),
-            path.join(basePath, '../../../livcap/.build/release/livcap'),
+            // Relative to dist-electron/main
+            path.join(__dirname, '../../../livcap/.build/release/livcap'),
+            // Relative to dist-electron
+            path.join(__dirname, '../../livcap/.build/release/livcap'),
+            // Home directory
+            path.join(process.env.HOME || '', 'Projects/transcriber/Personal-Project/livcap/.build/release/livcap'),
             path.join(process.env.HOME || '', 'livcap/.build/release/livcap'),
-            '/usr/local/bin/livcap'
+            // Common install locations
+            '/usr/local/bin/livcap',
+            '/opt/homebrew/bin/livcap'
         ]
         
         for (const p of possiblePaths) {
@@ -45,6 +51,7 @@ class LivcapServer {
         }
         
         log.warn('[LivcapServer] Livcap binary not found')
+        log.warn('[LivcapServer] Searched paths:', possiblePaths)
         return possiblePaths[0]
     }
     
