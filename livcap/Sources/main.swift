@@ -213,21 +213,26 @@ class LivcapTranscriber {
     }
 }
 
-// MARK: - CLI Entry Point
+// MARK: - Signal Handling
 
-var transcriber: LivcapTranscriber?
+// Global reference for signal handlers (required because Swift closures can't capture context for C function pointers)
+private var gTranscriber: LivcapTranscriber?
+
+private func handleSignal(_ signal: Int32) {
+    print("\n[Livcap] Received signal \(signal), shutting down...", terminator: "\n")
+    fflush(stdout)
+    gTranscriber?.stop()
+    exit(0)
+}
+
+// MARK: - CLI Entry Point
 
 func main() {
     print("[Livcap] Starting...", terminator: "\n")
     fflush(stdout)
     
-    transcriber = LivcapTranscriber()
-    
-    guard let transcriber = transcriber else {
-        print("[Livcap] ERROR: Failed to create transcriber", terminator: "\n")
-        fflush(stdout)
-        exit(1)
-    }
+    let transcriber = LivcapTranscriber()
+    gTranscriber = transcriber
     
     // Handle commands from stdin (from Node.js parent process)
     let inputHandle = FileHandle.standardInput
@@ -290,20 +295,9 @@ func main() {
         RunLoop.main.run()
     }
     
-    // Handle termination signals
-    signal(SIGINT) { _ in
-        print("\n[Livcap] Shutting down...", terminator: "\n")
-        fflush(stdout)
-        transcriber.stop()
-        exit(0)
-    }
-    
-    signal(SIGTERM) { _ in
-        print("\n[Livcap] Received SIGTERM, shutting down...", terminator: "\n")
-        fflush(stdout)
-        transcriber.stop()
-        exit(0)
-    }
+    // Handle termination signals using global reference
+    signal(SIGINT, handleSignal)
+    signal(SIGTERM, handleSignal)
     
     // Block forever
     dispatchMain()
