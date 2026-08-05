@@ -1,14 +1,261 @@
 const log = require('electron-log')
 const { AudioManager } = require('./audioManager.cjs')
 const { Summarizer } = require('./summarizer.cjs')
-const { LivcapServer } = require('../server/livcap-server.js')
+const { spawn } = require('child_process')
+const path = require('path')
+const fs = require('fs')
+const { WebSocketServer, WebSocket } = require('ws')
+
+// Inline LivcapServer class to avoid bundling issues
+class LivcapServer {
+    constructor(options = {}) {
+        this.port = options.port || 8766
+        this.livcapPath = options.livcapPath || this.findLivcapBinary()
+        this.ollamaUrl = options.ollamaUrl || 'http://localhost:11434'
+        this.summaryModel = options.summaryModel || 'llama3.2:latest'
+        
+        this.livcapProcess = null
+        this.wss = null
+        this.clients = new Set()
+        this.isListening = false
+        this.transcriptBuffer = []
+        this.partialTranscript = ''
+        this.lastSummaryTime = 0
+        this.summaryCooldown = 3000
+        this.speakerCounter = 0
+        this.lastSpeakerTime = Date.now()
+        this.currentSpeaker = 'Speaker 1'
+        this.silenceThreshold = 15000
+    }
+    
+    findLivcapBinary() {
+        const basePath = path.join(__dirname, '..')
+        const possiblePaths = [
+            path.join(basePath, '../../livcap/.build/release/livcap'),
+            path.join(basePath, '../../../livcap/.build/release/livcap'),
+            path.join(process.env.HOME || '', 'livcap/.build/release/livcap'),
+            '/usr/local/bin/livcap'
+        ]
+        
+        for (const p of possiblePaths) {
+            if (fs.existsSync(p)) {
+                log.info(`[LivcapServer] Found Livcap at: ${p}`)
+                return p
+            }
+        }
+        
+        log.warn('[LivcapServer] Livcap binary not found')
+        return possiblePaths[0]
+    }
+    
+    start() {
+        return new Promise((resolve, reject) => {
+            this.wss = new WebSocketServer({ port: this.port })
+            
+            this.wss.on('connection', (ws) => {
+                log.info('[LivcapServer] Client connected')
+                this.clients.add(ws)
+                
+                if (this.transcriptBuffer.length > 0) {
+                    ws.send(JSON.stringify({ type: 'sync', transcripts: this.transcriptBuffer }))
+                }
+                
+                ws.on('message', (message) => this.handleClientMessage(message))
+                ws.on('close', () => { this.clients.delete(ws) })
+                ws.on('error', (error) => { log.error('[LivcapServer] Client error:', error); this.clients.delete(ws) })
+            })
+            
+            this.wss.on('listening', () => {
+                log.info(`[LivcapServer] WebSocket server started on port ${this.port}`)
+                this.startLivcapProcess()
+                resolve()
+            })
+            
+            this.wss.on('error', (error) => {
+                log.error('[LivcapServer] WebSocket server error:', error)
+                reject(error)
+            })
+        })
+    }
+    
+    stop() {
+        return new Promise((resolve) => {
+            log.info('[LivcapServer] Stopping...')
+            
+            if (this.livcapProcess) {
+                try { this.livcapProcess.stdin.write('EXIT\n') } catch(e) {}
+                setTimeout(() => {
+                    if (this.livcapProcess) {
+                        this.livcapProcess.kill('SIGTERM')
+                        this.livcapProcess = null
+                    }
+                }, 1000)
+            }
+            
+            for (const client of this.clients) {
+                try { client.close() } catch(e) {}
+            }
+            this.clients.clear()
+            
+            if (this.wss) {
+                this.wss.close(() => { resolve() })
+            } else {
+                resolve()
+            }
+        })
+    }
+    
+    startLivcapProcess() {
+        if (this.livcapProcess) return
+        
+        if (!fs.existsSync(this.livcapPath)) {
+            log.error(`[LivcapServer] Livcap binary not found at: ${this.livcapPath}`)
+            this.broadcast({ type: 'error', message: 'Livcap binary not found. Please build it from livcap/Sources/main.swift' })
+            return
+        }
+        
+        log.info(`[LivcapServer] Starting Livcap process: ${this.livcapPath}`)
+        
+        this.livcapProcess = spawn(this.livcapPath, [], { stdio: ['pipe', 'pipe', 'pipe'] })
+        let buffer = ''
+        
+        this.livcapProcess.stdout.on('data', (data) => {
+            buffer += data.toString()
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || ''
+            
+            for (const line of lines) {
+                if (line.startsWith('LIVCAP:')) {
+                    try {
+                        const message = JSON.parse(line.substring(7))
+                        this.handleLivcapMessage(message)
+                    } catch (e) {
+                        log.error('[LivcapServer] Failed to parse:', e)
+                    }
+                } else if (line.trim()) {
+                    log.info(`[Livcap] ${line}`)
+                }
+            }
+        })
+        
+        this.livcapProcess.stderr.on('data', (data) => log.warn(`[Livcap stderr]: ${data}`))
+        this.livcapProcess.on('close', (code) => { this.livcapProcess = null; this.isListening = false })
+        this.livcapProcess.on('error', (error) => {
+            log.error('[LivcapServer] Process error:', error)
+            this.broadcast({ type: 'error', message: `Livcap error: ${error.message}` })
+        })
+    }
+    
+    handleLivcapMessage(message) {
+        log.info(`[LivcapServer] ${message.type}: "${message.transcript}"`)
+        
+        switch (message.type) {
+            case 'start':
+                this.isListening = true
+                this.broadcast({ type: 'status', status: 'listening', message: 'Listening for speech...' })
+                break
+            case 'stop':
+                this.isListening = false
+                this.broadcast({ type: 'status', status: 'stopped', message: 'Stopped listening' })
+                break
+            case 'partial':
+                this.partialTranscript = message.transcript
+                this.broadcast({ type: 'partial', transcript: message.transcript })
+                break
+            case 'final':
+                this.handleFinalTranscript(message)
+                break
+            case 'error':
+                this.broadcast({ type: 'error', message: message.transcript })
+                break
+        }
+    }
+    
+    handleFinalTranscript(message) {
+        const transcript = message.transcript.trim()
+        if (!transcript) return
+        
+        const now = Date.now()
+        if (now - this.lastSpeakerTime > this.silenceThreshold) {
+            this.speakerCounter++
+            this.currentSpeaker = `Speaker ${this.speakerCounter + 1}`
+        }
+        this.lastSpeakerTime = now
+        
+        const entry = {
+            id: Date.now().toString(),
+            speaker: this.currentSpeaker,
+            text: transcript,
+            timestamp: new Date().toISOString()
+        }
+        this.transcriptBuffer.push(entry)
+        this.partialTranscript = ''
+        this.broadcast({ type: 'transcript', ...entry })
+        
+        if (now - this.lastSummaryTime >= this.summaryCooldown) {
+            this.generateSummary()
+            this.lastSummaryTime = now
+        }
+    }
+    
+    async generateSummary() {
+        if (this.transcriptBuffer.length === 0) return
+        
+        const recentTranscripts = this.transcriptBuffer.slice(-5).map(t => `${t.speaker}: ${t.text}`).join('\n')
+        const prompt = `Based on this meeting transcript, provide a brief summary and any action items:\n\n${recentTranscripts}\n\nRespond in this format:\nSUMMARY: <brief summary>\nACTION_ITEMS: <any action items, or "None">`
+        
+        try {
+            const response = await fetch(`${this.ollamaUrl}/api/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: this.summaryModel, prompt, stream: false })
+            })
+            
+            if (!response.ok) throw new Error(`Ollama returned ${response.status}`)
+            
+            const data = await response.json()
+            const responseText = data.response || ''
+            const summaryMatch = responseText.match(/SUMMARY:\s*(.+?)(?:\n|$)/i)
+            const actionsMatch = responseText.match(/ACTION_ITEMS:\s*(.+?)(?:\n|$)/i)
+            
+            this.broadcast({
+                type: 'summary',
+                summary: summaryMatch ? summaryMatch[1].trim() : responseText.trim(),
+                actionItems: actionsMatch ? actionsMatch[1].trim() : null,
+                speaker: this.currentSpeaker,
+                timestamp: new Date().toISOString()
+            })
+        } catch (error) {
+            log.error('[LivcapServer] Summary error:', error)
+        }
+    }
+    
+    handleClientMessage(message) {
+        try {
+            const data = JSON.parse(message)
+            if (data.type === 'get-transcripts') {
+                this.broadcast({ type: 'sync', transcripts: this.transcriptBuffer })
+            }
+        } catch (e) {}
+    }
+    
+    broadcast(message) {
+        const json = JSON.stringify(message)
+        for (const client of this.clients) {
+            if (client.readyState === WebSocket.OPEN) client.send(json)
+        }
+    }
+    
+    getStatus() {
+        return { listening: this.isListening, transcriptCount: this.transcriptBuffer.length, currentSpeaker: this.currentSpeaker }
+    }
+}
 
 const audioManager = new AudioManager()
 const summarizer = new Summarizer()
 const livcapServer = new LivcapServer({ port: 8766 })
 
 // Legacy Deepgram support (can be removed later)
-const { WebSocket } = require('ws')
 let deepgramSocket = null
 let deepgramApiKey = null
 
