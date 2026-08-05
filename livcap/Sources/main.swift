@@ -116,18 +116,13 @@ class LivcapTranscriber {
                 // Create content filter for entire display
                 let filter = SCContentFilter(display: display, excludingWindows: [])
                 
+                // Create stream output handler
+                let audioOutput = AudioStreamOutput(recognitionRequest: recognitionRequest)
+                
                 // Create and start stream
                 let stream = SCStream(filter: filter, configuration: config, delegate: nil)
                 
-                try stream.addStreamOutput(.audio, sampleBufferQueue: DispatchQueue(label: "audio"), sampleBufferHandler: { sampleBuffer, error in
-                    guard let sampleBuffer = sampleBuffer else { return }
-                    
-                    // Convert CMSampleBuffer to AVAudioPCMBuffer
-                    guard let pcmBuffer = self.createPCMBuffer(from: sampleBuffer) else { return }
-                    
-                    // Append audio to speech recognizer
-                    self.recognitionRequest?.append(pcmBuffer)
-                })
+                try stream.addStreamOutput(audioOutput, type: .audio, sampleHandlerQueue: DispatchQueue(label: "audio"))
                 
                 try await stream.startCapture()
                 self.isCapturingSystemAudio = true
@@ -147,14 +142,26 @@ class LivcapTranscriber {
     private func createPCMBuffer(from sampleBuffer: CMSampleBuffer) -> AVAudioPCMBuffer? {
         guard let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer) else { return nil }
         
-        let audioStreamBasicDescription = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription)
+        guard let audioStreamBasicDescription = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription) else { return nil }
         guard let asbd = audioStreamBasicDescription?.pointee else { return nil }
         
         let frameCount = CMSampleBufferGetNumSamples(sampleBuffer)
         guard frameCount > 0 else { return nil }
         
-        guard let format = AVAudioFormat(streamDescription: &UnsafeMutablePointer(mutating: audioStreamBasicDescription)!.pointee) else { return nil }
+        // Create format for 16kHz mono
+        var targetFormat = AudioStreamBasicDescription(
+            mSampleRate: 16000,
+            mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,
+            mBytesPerPacket: 4,
+            mFramesPerPacket: 1,
+            mBytesPerFrame: 4,
+            mChannelsPerFrame: 1,
+            mBitsPerChannel: 32,
+            mReserved: 0
+        )
         
+        guard let format = AVAudioFormat(streamDescription: &targetFormat) else { return nil }
         guard let pcmBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount)) else { return nil }
         pcmBuffer.frameLength = AVAudioFrameCount(frameCount)
         
@@ -167,11 +174,145 @@ class LivcapTranscriber {
         guard let data = dataPointer else { return nil }
         
         if let floatData = pcmBuffer.floatChannelData?[0] {
-            memcpy(floatData, data, length)
+            memcpy(floatData, data, min(length, frameCount * 4))
         }
         
         return pcmBuffer
     }
+    
+    func stop() {
+        if #available(macOS 12.3, *) {
+            // Stop capture if needed
+        }
+        
+        audioEngine.stop()
+        audioEngine.inputNode.removeTap(onBus: 0)
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+        recognitionRequest = nil
+        recognitionTask = nil
+        silenceTimer?.invalidate()
+        
+        emitMessage(type: .stop, transcript: "Stopped listening", isFinal: false)
+        print("[Livcap] Transcription stopped", terminator: "\n")
+        fflush(stdout)
+    }
+    
+    private func handleRecognitionResult(result: SFSpeechRecognitionResult?, error: Error?) {
+        if let error = error {
+            print("[Livcap] Recognition error: \(error.localizedDescription)", terminator: "\n")
+            fflush(stdout)
+            emitMessage(type: .error, transcript: error.localizedDescription, isFinal: false)
+            return
+        }
+        
+        guard let result = result else { return }
+        
+        let transcription = result.bestTranscription.formattedString
+        let isFinal = result.isFinal
+        
+        if isFinal {
+            let finalText = result.bestTranscription.segments.map { $0.substring }.joined(separator: " ")
+            emitMessage(type: .final, transcript: finalText, isFinal: true)
+            lastFinalTranscript = finalText
+            partialBuffer = ""
+            print("[Livcap] FINAL: \(finalText)", terminator: "\n")
+            fflush(stdout)
+        } else if !transcription.isEmpty {
+            partialBuffer = transcription
+            emitMessage(type: .partial, transcript: transcription, isFinal: false)
+            checkForSilence(transcription: transcription)
+        }
+    }
+    
+    private func checkForSilence(transcription: String) {
+        silenceTimer?.invalidate()
+        
+        if !transcription.isEmpty && transcription != lastFinalTranscript {
+            silenceTimer = Timer.scheduledTimer(withTimeInterval: silenceThreshold, repeats: false) { [weak self] _ in
+                guard let self = self else { return }
+                if self.partialBuffer != self.lastFinalTranscript && !self.partialBuffer.isEmpty {
+                    self.emitMessage(type: .final, transcript: self.partialBuffer, isFinal: true)
+                    self.lastFinalTranscript = self.partialBuffer
+                    print("[Livcap] Finalized: \(self.partialBuffer)", terminator: "\n")
+                    fflush(stdout)
+                }
+            }
+        }
+    }
+    
+    private func emitMessage(type: TranscriptMessage.MessageType, transcript: String, isFinal: Bool) {
+        let message = TranscriptMessage(
+            type: type,
+            transcript: transcript,
+            isFinal: isFinal,
+            timestamp: ISO8601DateFormatter().string(from: Date())
+        )
+        
+        guard let jsonData = try? JSONEncoder().encode(message),
+              let jsonString = String(data: jsonData, encoding: .utf8) else { return }
+        
+        print("LIVCAP:\(jsonString)", terminator: "\n")
+        fflush(stdout)
+    }
+}
+
+// MARK: - SCStream Output Handler
+
+@available(macOS 12.3, *)
+class AudioStreamOutput: NSObject, SCStreamOutput {
+    private weak var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    
+    init(recognitionRequest: SFSpeechAudioBufferRecognitionRequest) {
+        self.recognitionRequest = recognitionRequest
+        super.init()
+    }
+    
+    func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
+        guard type == .audio else { return }
+        guard let request = recognitionRequest else { return }
+        
+        // Convert to PCM buffer and append
+        guard let pcmBuffer = createPCMBuffer(from: sampleBuffer) else { return }
+        request.append(pcmBuffer)
+    }
+    
+    private func createPCMBuffer(from sampleBuffer: CMSampleBuffer) -> AVAudioPCMBuffer? {
+        let frameCount = CMSampleBufferGetNumSamples(sampleBuffer)
+        guard frameCount > 0 else { return nil }
+        
+        // Create format for 16kHz mono
+        var targetFormat = AudioStreamBasicDescription(
+            mSampleRate: 16000,
+            mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,
+            mBytesPerPacket: 4,
+            mFramesPerPacket: 1,
+            mBytesPerFrame: 4,
+            mChannelsPerFrame: 1,
+            mBitsPerChannel: 32,
+            mReserved: 0
+        )
+        
+        guard let format = AVAudioFormat(streamDescription: &targetFormat) else { return nil }
+        guard let pcmBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount)) else { return nil }
+        pcmBuffer.frameLength = AVAudioFrameCount(frameCount)
+        
+        guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return nil }
+        
+        var length = 0
+        var dataPointer: UnsafeMutablePointer<Int8>?
+        CMBlockBufferGetDataPointer(blockBuffer, atOffset: 0, lengthAtOffsetOut: nil, totalLengthOut: &length, dataPointerOut: &dataPointer)
+        
+        guard let data = dataPointer else { return nil }
+        
+        if let floatData = pcmBuffer.floatChannelData?[0] {
+            memcpy(floatData, data, min(length, frameCount * 4))
+        }
+        
+        return pcmBuffer
+    }
+}
     
     private func startMicrophoneCapture() {
         do {
@@ -190,26 +331,6 @@ class LivcapTranscriber {
             print("[Livcap] Microphone capture failed: \(error.localizedDescription)", terminator: "\n")
             fflush(stdout)
         }
-    }
-    
-    func stop() {
-        if #available(macOS 12.3, *) {
-            Task {
-                // Stop capture if needed
-            }
-        }
-        
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
-        recognitionRequest?.endAudio()
-        recognitionTask?.cancel()
-        recognitionRequest = nil
-        recognitionTask = nil
-        silenceTimer?.invalidate()
-        
-        emitMessage(type: .stop, transcript: "Stopped listening", isFinal: false)
-        print("[Livcap] Transcription stopped", terminator: "\n")
-        fflush(stdout)
     }
     
     private func handleRecognitionResult(result: SFSpeechRecognitionResult?, error: Error?) {
