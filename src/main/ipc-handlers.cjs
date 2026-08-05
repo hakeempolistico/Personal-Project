@@ -29,14 +29,18 @@ class LivcapServer {
     }
     
     findLivcapBinary() {
-        // Try multiple possible locations
+        const baseDir = path.join(process.env.HOME || '', 'Projects/transcriber/Personal-Project/livcap/.build')
         const possiblePaths = [
-            // Relative to dist-electron/main
+            // Apple Silicon Mac
+            path.join(baseDir, 'arm64-apple-macosx/release/livcap'),
+            path.join(baseDir, 'release/livcap'),
+            // Relative paths from dist-electron
+            path.join(__dirname, '../../../livcap/.build/arm64-apple-macosx/release/livcap'),
             path.join(__dirname, '../../../livcap/.build/release/livcap'),
-            // Relative to dist-electron
+            path.join(__dirname, '../../livcap/.build/arm64-apple-macosx/release/livcap'),
             path.join(__dirname, '../../livcap/.build/release/livcap'),
             // Home directory
-            path.join(process.env.HOME || '', 'Projects/transcriber/Personal-Project/livcap/.build/release/livcap'),
+            path.join(process.env.HOME || '', 'Projects/transcriber/Personal-Project/livcap/.build/arm64-apple-macosx/release/livcap'),
             path.join(process.env.HOME || '', 'livcap/.build/release/livcap'),
             // Common install locations
             '/usr/local/bin/livcap',
