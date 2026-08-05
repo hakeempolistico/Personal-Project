@@ -1,7 +1,7 @@
 const log = require('electron-log')
 const { AudioManager } = require('./audioManager.cjs')
 const { Summarizer } = require('./summarizer.cjs')
-const { LivcapServer } = require('../server/livcap-server.cjs')
+const { LivcapServer } = require('../server/livcap-server.js')
 
 const audioManager = new AudioManager()
 const summarizer = new Summarizer()
