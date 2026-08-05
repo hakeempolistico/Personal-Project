@@ -9,7 +9,6 @@ struct TranscriptMessage: Codable {
     let transcript: String
     let isFinal: Bool
     let timestamp: String
-    let confidence: Float?
     
     enum MessageType: String, Codable {
         case partial
@@ -42,19 +41,41 @@ class LivcapTranscriber {
     }
     
     func requestPermissions(completion: @escaping (Bool, Bool) -> Void) {
-        SFSpeechRecognizer.requestAuthorization { authStatus in
-            DispatchQueue.main.async {
-                switch authStatus {
-                case .authorized:
-                    AVAudioSession.sharedInstance().requestRecordPermission { granted in
-                        DispatchQueue.main.async {
-                            completion(true, granted)
-                        }
+        // Request microphone permission (macOS doesn't use AVAudioSession)
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            // Check speech recognition authorization
+            SFSpeechRecognizer.requestAuthorization { authStatus in
+                DispatchQueue.main.async {
+                    switch authStatus {
+                    case .authorized:
+                        completion(true, true)
+                    default:
+                        completion(false, false)
                     }
-                default:
-                    completion(false, false)
                 }
             }
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .audio) { granted in
+                if granted {
+                    SFSpeechRecognizer.requestAuthorization { authStatus in
+                        DispatchQueue.main.async {
+                            switch authStatus {
+                            case .authorized:
+                                completion(true, true)
+                            default:
+                                completion(false, granted)
+                            }
+                        }
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        completion(false, false)
+                    }
+                }
+            }
+        default:
+            completion(false, false)
         }
     }
     
@@ -62,11 +83,6 @@ class LivcapTranscriber {
         // Cancel any existing task
         recognitionTask?.cancel()
         recognitionTask = nil
-        
-        // Configure audio session
-        let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
-        try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
         
         // Create recognition request
         recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
@@ -81,7 +97,7 @@ class LivcapTranscriber {
         }
         recognitionRequest.shouldReportPartialResults = true
         
-        // Configure audio input
+        // Configure audio input - macOS uses AVAudioEngine directly
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         
@@ -141,7 +157,7 @@ class LivcapTranscriber {
                 .map { $0.substring }
                 .joined(separator: " ")
             
-            emitMessage(type: .final, transcript: finalText, isFinal: true, confidence: result.bestTranscription.confidence)
+            emitMessage(type: .final, transcript: finalText, isFinal: true)
             lastFinalTranscript = finalText
             partialBuffer = ""
             
@@ -178,13 +194,12 @@ class LivcapTranscriber {
         }
     }
     
-    private func emitMessage(type: TranscriptMessage.MessageType, transcript: String, isFinal: Bool, confidence: Float? = nil) {
+    private func emitMessage(type: TranscriptMessage.MessageType, transcript: String, isFinal: Bool) {
         let message = TranscriptMessage(
             type: type,
             transcript: transcript,
             isFinal: isFinal,
-            timestamp: ISO8601DateFormatter().string(from: Date()),
-            confidence: confidence
+            timestamp: ISO8601DateFormatter().string(from: Date())
         )
         
         guard let jsonData = try? JSONEncoder().encode(message),
@@ -279,14 +294,14 @@ func main() {
     signal(SIGINT) { _ in
         print("\n[Livcap] Shutting down...", terminator: "\n")
         fflush(stdout)
-        transcriber?.stop()
+        transcriber.stop()
         exit(0)
     }
     
     signal(SIGTERM) { _ in
         print("\n[Livcap] Received SIGTERM, shutting down...", terminator: "\n")
         fflush(stdout)
-        transcriber?.stop()
+        transcriber.stop()
         exit(0)
     }
     

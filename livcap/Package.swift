@@ -6,13 +6,9 @@ let package = Package(
     platforms: [
         .macOS(.v13)
     ],
-    dependencies: [
-        .package(url: "https://github.com/daltoniam/Starscream.git", from: "4.0.0")
-    ],
     targets: [
         .executableTarget(
             name: "livcap",
-            dependencies: ["Starscream"],
             path: "Sources"
         )
     ]
