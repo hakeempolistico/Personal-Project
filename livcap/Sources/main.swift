@@ -35,8 +35,10 @@ class LivcapTranscriber {
     private let silenceThreshold: TimeInterval = 2.0
     
     init() {
+        FileHandle.standardError.write("DEBUG: LivcapTranscriber.init()\n".data(using: .utf8)!)
         self.speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
         speechRecognizer?.supportsOnDeviceRecognition = true
+        FileHandle.standardError.write("DEBUG: Speech recognizer created\n".data(using: .utf8)!)
     }
     
     func requestPermissions(completion: @escaping (Bool, Bool) -> Void) {
@@ -295,6 +297,9 @@ private func handleSignal(_ signal: Int32) {
 // MARK: - CLI Entry Point
 
 func main() {
+    // Debug output
+    FileHandle.standardError.write("DEBUG: main() started\n".data(using: .utf8)!)
+    
     print("[Livcap] Starting...", terminator: "\n")
     fflush(stdout)
     
